@@ -9,7 +9,7 @@ import protecao
 from protecao import ProtectionError
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = 12
+VERSION = 13
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(sys.executable if FROZEN else os.path.abspath(__file__))
 RES = getattr(sys, "_MEIPASS", APP_DIR)
@@ -40,7 +40,7 @@ DEFAULT = {
         "turbo": ""
     },
     "ui": {"theme": "auto", "tint": 12, "backdrop": "black"},
-    "positivo": {"email": "", "password": ""},
+    "positivo": {"email": "", "password": "", "session": "", "device_id": ""},
     "rooms": ["Sala", "Cozinha", "Quarto", "Banheiro", "Escritório"],
     "device_room": {},
     "port": 8765
@@ -96,11 +96,12 @@ def save_config():
     """Grava a configuração. Segredos vão protegidos; se não der para proteger, nada é gravado."""
     out = copy.deepcopy(CFG)
     out["access_secret"] = protecao.protect(CFG.get("access_secret") or "")
-    pw = (CFG.get("positivo") or {}).get("password") or ""
-    if pw and not protecao.is_protected(pw):           # legado (b64:/texto) -> protegido
-        pw = protecao.protect(protecao.unprotect(pw))
-        CFG["positivo"]["password"] = pw
-        out["positivo"]["password"] = pw
+    for key in ("password", "session"):               # Positivo: senha e sessão sempre protegidas
+        v = (CFG.get("positivo") or {}).get(key) or ""
+        if v and not protecao.is_protected(v):        # legado (b64:/texto) -> protegido
+            v = protecao.protect(protecao.unprotect(v))
+            CFG["positivo"][key] = v
+            out["positivo"][key] = v
     os.makedirs(CONF_DIR, exist_ok=True)
     tmp = CONF_PATH + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
@@ -923,6 +924,24 @@ def positivo_devices(force=False):
         return cl._cache            # mantém o último estado conhecido
 
 
+def _positivo_device_id():
+    """Mesma identidade sempre: evita que a Positivo avise 'novo login' a cada abertura."""
+    import positivo
+    p = CFG["positivo"]
+    if not p.get("device_id"):
+        p["device_id"] = positivo.new_device_id()
+        try:
+            save_config()
+        except Exception as e:
+            print("[Positivo]", e)
+    return p["device_id"]
+
+
+def _save_positivo_session(sid):
+    CFG["positivo"]["session"] = protecao.protect(sid)
+    save_config()
+
+
 def start_positivo():
     p = CFG.get("positivo") or {}
     if not p.get("email") or not p.get("password"):
@@ -930,7 +949,13 @@ def start_positivo():
         return
     try:
         import positivo
-        POS["client"] = positivo.Positivo(p["email"], protecao.unprotect(p["password"]))
+        try:
+            session = protecao.unprotect(p.get("session") or "")
+        except ProtectionError:
+            session = ""                              # sessão ilegível: faz login de novo
+        POS["client"] = positivo.Positivo(p["email"], protecao.unprotect(p["password"]),
+                                          device_id=_positivo_device_id(), session=session,
+                                          on_session=_save_positivo_session)
     except Exception as e:
         POS.update(client=None, error=str(e))
 
@@ -940,11 +965,13 @@ def connect_positivo(email, password):
     try:
         if not password and CFG["positivo"].get("password") and email == CFG["positivo"].get("email"):
             password = protecao.unprotect(CFG["positivo"]["password"])
-        cl = positivo.Positivo(email, password)
+        cl = positivo.Positivo(email, password, device_id=_positivo_device_id())
         cl.login()
         devs = cl.devices(force=True)
-        CFG["positivo"] = {"email": email.strip(), "password": protecao.protect(password)}
+        CFG["positivo"].update(email=email.strip(), password=protecao.protect(password),
+                               session=protecao.protect(cl.sid))
         save_config()
+        cl.on_session = _save_positivo_session
     except Exception as e:
         return dict(ok=False, error=str(e))
     POS.update(client=cl, error="")
@@ -1183,7 +1210,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, dict(ok=False, error="Preencha o e-mail."))
                 return self._send(200, connect_positivo(email, b.get("password") or ""))
             if p == "/api/positivo/disconnect":
-                CFG["positivo"] = {"email": "", "password": ""}
+                CFG["positivo"].update(email="", password="", session="")   # mantém a identidade do aparelho
                 save_config()
                 POS.update(client=None, error="")
                 return self._send(200, {"ok": True})

@@ -15,7 +15,10 @@ ENDPOINT = "https://a1.tuyaus.com/api.json"
 CLIENT_ID = "qk4c93xsttfjsm4ktr94"
 APP_KEY = "A_9v5dh8yngmhtxdjen7t7qqx5ggmdf5su_w7vm9gr7meys387fpj7y7yrvx8w554cd"
 COUNTRY = "55"
-DEVICE_ID = uuid.uuid5(uuid.NAMESPACE_DNS, "controlecasa.positivo").hex + uuid.uuid4().hex[:12]
+def new_device_id():
+    """Identidade do 'aparelho' perante a Positivo. Gerada uma vez e guardada na configuração:
+    se mudar a cada abertura, a Positivo trata como aparelho novo e avisa de um novo login."""
+    return uuid.uuid5(uuid.NAMESPACE_DNS, "controlecasa.positivo").hex + uuid.uuid4().hex[:12]
 SIGN_KEYS = {"a", "v", "lat", "lon", "lang", "deviceId", "imei", "imsi", "appVersion", "ttid", "isH5",
              "h5Token", "os", "clientId", "postData", "time", "requestId", "n4h5", "sid", "sp", "et"}
 PREFIX = "pos:"
@@ -63,9 +66,11 @@ def colour_to_raw(code, value):
 
 # ======================================================================== cliente
 class Positivo:
-    def __init__(self, email, password):
+    def __init__(self, email, password, device_id=None, session=None, on_session=None):
         self.email, self.password = email.strip(), password
-        self.sid = None
+        self.device_id = device_id or new_device_id()
+        self.sid = session or None         # sessão guardada: reabrir o programa não faz login de novo
+        self.on_session = on_session       # chamado quando uma sessão nova é criada (para guardar)
         self.lock = threading.Lock()
         self.schemas = {}       # devId -> {dp_id: code}
         self.codes = {}         # devId -> {code: dp_id}
@@ -90,7 +95,7 @@ class Positivo:
 
     def _call(self, action, post=None, version="1.0", sid=True, extra=None):
         params = {
-            "a": action, "v": version, "clientId": CLIENT_ID, "deviceId": DEVICE_ID,
+            "a": action, "v": version, "clientId": CLIENT_ID, "deviceId": self.device_id,
             "appVersion": "1.1.6", "appRnVersion": "5.14", "channel": "oem", "platform": "Linux",
             "os": "Android", "osSystem": "9", "lang": "pt", "timeZoneId": "America/Sao_Paulo",
             "ttid": "sdk_tuya@" + CLIENT_ID, "et": "0.0.1", "sdkVersion": "3.10.0",
@@ -141,6 +146,11 @@ class Positivo:
             "countryCode": COUNTRY, "email": self.email, "ifencrypt": 1, "options": '{"group": 1}',
             "passwd": passwd, "token": tok["token"]}, sid=False)
         self.sid = res["sid"]
+        if self.on_session:
+            try:
+                self.on_session(self.sid)
+            except Exception as e:
+                print("[Positivo] não consegui guardar a sessão:", e)
         return True
 
     # ---------- aparelhos
