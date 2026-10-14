@@ -139,9 +139,12 @@ As configurações não se perdem, porque ficam fora da pasta do programa.
 
 - Tudo fica **no seu computador**, em `%APPDATA%\ControleCasa\config.json`. Não há servidor nosso
   nem coleta de dados. O programa só conversa com a nuvem da Tuya (e com a da Positivo, se você ligar).
-- A senha da Positivo é guardada **protegida pelo Windows** (DPAPI) e só abre na sua conta de usuário.
+- O **Access Secret da Tuya** e a **senha da Positivo** são guardados **protegidos pelo Windows** (DPAPI):
+  só abrem na sua conta de usuário, neste computador. Se o Windows não conseguir proteger, o programa
+  avisa e não grava o segredo.
 - A interface funciona por um servidor local que só aceita conexões do próprio PC (`127.0.0.1`).
   Pedidos vindos de sites abertos no navegador são recusados.
+- Para reportar uma falha de segurança, veja o [SECURITY.md](SECURITY.md).
 - O relatório do Diagnóstico não inclui suas chaves nem sua senha.
 
 ## Problemas comuns
@@ -164,14 +167,17 @@ As configurações não se perdem, porque ficam fora da pasta do programa.
 | `positivo.py` | Conta Positivo Casa Inteligente (não oficial) |
 | `index.html` | Interface inteira (HTML/CSS/JS, sem dependências) |
 
-A interface usa uma API local em `http://127.0.0.1:8765`. Os pedidos `POST` precisam do cabeçalho
-`X-Controle-Casa: 1`, o que dá para usar em atalhos ou num Stream Deck:
+A interface usa uma API local em `http://127.0.0.1:8765`. Todos os pedidos para `/api/` (menos
+`GET /api/version`) precisam do cabeçalho `X-Controle-Casa: 1`, o que dá para usar em atalhos ou num
+Stream Deck. Os pedidos `POST` aceitam corpo JSON de até 64 KB.
 
 ```
+GET  /api/version                    versão do programa (sem cabeçalho)
 GET  /api/state                      estado do ar e dos aparelhos
 POST /api/ac          {"power": true, "temp": 23, "mode": "cool", "fan": "auto", "turbo": false}
 POST /api/device/ID   {"on": true} | {"brightness": 50} | {"temp": 30} | {"color": {"h": 270, "s": 100}}
 POST /api/lights-off  {} ou {"room": "Sala"}
+POST /api/quit        {}             fecha o programa
 ```
 
 Os IDs dos aparelhos aparecem em `GET /api/state`.

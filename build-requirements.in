@@ -1,0 +1,2 @@
+# Ferramenta de build do .exe (entra no requirements.lock)
+pyinstaller==6.22.3

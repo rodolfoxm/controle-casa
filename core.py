@@ -4,9 +4,12 @@ Controle Casa - núcleo: configuração, conexão com a nuvem Tuya/Smart Life,
 descoberta automática de dispositivos e servidor local que a interface usa.
 """
 import collections, copy, json, os, re, sys, threading, time
+
+import protecao
+from protecao import ProtectionError
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = 11
+VERSION = 12
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(sys.executable if FROZEN else os.path.abspath(__file__))
 RES = getattr(sys, "_MEIPASS", APP_DIR)
@@ -72,20 +75,47 @@ def load_config():
         cfg["ui"]["backdrop"] = "black"
     for k in ("glass", "opacity", "real_glass", "blur", "refraction"):
         cfg["ui"].pop(k, None)
+    # segredos: em memória o Access Secret fica aberto; no disco, só protegido (DPAPI)
+    raw = cfg.get("access_secret") or ""
+    if raw:
+        try:
+            cfg["access_secret"] = protecao.unprotect(raw)
+            CONFIG_NOTES["legacy"] |= not protecao.is_protected(raw)
+        except ProtectionError as e:
+            cfg["access_secret"] = ""
+            CONFIG_NOTES["secret_error"] = str(e)
+    pw = (cfg.get("positivo") or {}).get("password") or ""
+    if pw and not protecao.is_protected(pw):
+        CONFIG_NOTES["legacy"] = True
     if cfg["access_id"] and cfg["access_secret"] and "configured" not in cfg:
         cfg["configured"] = True
     return cfg
 
 
 def save_config():
+    """Grava a configuração. Segredos vão protegidos; se não der para proteger, nada é gravado."""
+    out = copy.deepcopy(CFG)
+    out["access_secret"] = protecao.protect(CFG.get("access_secret") or "")
+    pw = (CFG.get("positivo") or {}).get("password") or ""
+    if pw and not protecao.is_protected(pw):           # legado (b64:/texto) -> protegido
+        pw = protecao.protect(protecao.unprotect(pw))
+        CFG["positivo"]["password"] = pw
+        out["positivo"]["password"] = pw
     os.makedirs(CONF_DIR, exist_ok=True)
     tmp = CONF_PATH + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(CFG, f, ensure_ascii=False, indent=2)
+        json.dump(out, f, ensure_ascii=False, indent=2)
     os.replace(tmp, CONF_PATH)
 
 
+CONFIG_NOTES = {"legacy": False, "secret_error": ""}
 CFG = load_config()
+if CONFIG_NOTES["legacy"]:                             # config antiga com segredo legível: regrava protegida
+    try:
+        save_config()
+        CONFIG_NOTES["legacy"] = False
+    except Exception as e:
+        print("Não consegui proteger a configuração antiga:", e)
 PORT = int(CFG.get("port", 8765))
 URL = f"http://127.0.0.1:{PORT}/"
 
@@ -900,23 +930,23 @@ def start_positivo():
         return
     try:
         import positivo
-        POS["client"] = positivo.Positivo(p["email"], positivo.unprotect(p["password"]))
+        POS["client"] = positivo.Positivo(p["email"], protecao.unprotect(p["password"]))
     except Exception as e:
         POS.update(client=None, error=str(e))
 
 
 def connect_positivo(email, password):
     import positivo
-    if not password and CFG["positivo"].get("password") and email == CFG["positivo"].get("email"):
-        password = positivo.unprotect(CFG["positivo"]["password"])
-    cl = positivo.Positivo(email, password)
     try:
+        if not password and CFG["positivo"].get("password") and email == CFG["positivo"].get("email"):
+            password = protecao.unprotect(CFG["positivo"]["password"])
+        cl = positivo.Positivo(email, password)
         cl.login()
         devs = cl.devices(force=True)
+        CFG["positivo"] = {"email": email.strip(), "password": protecao.protect(password)}
+        save_config()
     except Exception as e:
         return dict(ok=False, error=str(e))
-    CFG["positivo"] = {"email": email.strip(), "password": positivo.protect(password)}
-    save_config()
     POS.update(client=cl, error="")
     return dict(ok=True, count=len(devs), names=[d["name"] for d in devs])
 
@@ -933,6 +963,9 @@ LOCK = threading.Lock()
 def make_backend():
     global BACK
     start_positivo()
+    if CONFIG_NOTES["secret_error"] and not CFG.get("demo"):
+        BACK = None
+        return CONFIG_NOTES["secret_error"]
     if CFG.get("demo"):
         BACK = Demo()
     elif CFG.get("configured") and CFG["access_id"] and CFG["access_secret"]:
@@ -969,13 +1002,13 @@ def test_connection(key, secret, region="auto"):
             continue
         if n:
             SETUP["tuya"] = t
-            CFG.update(api_region=r, access_id=key, access_secret=secret)
+            CFG.update(api_region=r, access_id=key, access_secret=secret); CONFIG_NOTES["secret_error"] = ""
             return dict(ok=True, region=r, count=n, linked=True)
         first_ok = first_ok or (r, t)
     if first_ok:
         r, t = first_ok
         SETUP["tuya"] = t
-        CFG.update(api_region=r, access_id=key, access_secret=secret)
+        CFG.update(api_region=r, access_id=key, access_secret=secret); CONFIG_NOTES["secret_error"] = ""
         return dict(ok=True, region=r, count=0, linked=False)
     return dict(ok=False, error=last_err)
 
@@ -989,6 +1022,14 @@ def public_config():
 
 # ---------------------------------------------------------------- HTTP
 APP_HEADER = "X-Controle-Casa"
+PUBLIC_GET = {"/api/version"}          # o resto da API exige o cabeçalho do app
+MAX_BODY = 64 * 1024
+
+
+class BadRequest(Exception):
+    def __init__(self, code, msg):
+        super().__init__(msg)
+        self.code = code
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -1004,8 +1045,22 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     def _body(self):
-        n = int(self.headers.get("Content-Length") or 0)
-        return json.loads(self.rfile.read(n) or b"{}")
+        raw = self.headers.get("Content-Length")
+        try:
+            n = int(raw or 0)
+            if n < 0:
+                raise ValueError
+        except ValueError:
+            raise BadRequest(400, "Content-Length inválido.")
+        if n > MAX_BODY:
+            raise BadRequest(413, "Pedido grande demais.")
+        try:
+            data = json.loads(self.rfile.read(n) or b"{}")
+        except ValueError:
+            raise BadRequest(400, "JSON inválido.")
+        if not isinstance(data, dict):
+            raise BadRequest(400, "JSON inválido.")
+        return data
 
     def _file(self, name, ctype):
         with open(os.path.join(RES, name), "rb") as f:
@@ -1028,7 +1083,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._deny()
         try:
             p = self.path.split("?")[0]
-            if p in ("/api/quit", "/api/show") and not self._from_app():
+            if p.startswith("/api/") and p not in PUBLIC_GET and not self._from_app():
                 return self._deny()
             if p in ("/", "/index.html"):
                 return self._file("index.html", "text/html")
@@ -1052,10 +1107,7 @@ class Handler(BaseHTTPRequestHandler):
                     return self._send(200, {"text": "Nenhuma conta conectada."})
                 return self._send(200, {"text": BACK.diagnose()})
             if p == "/api/quit":
-                self._send(200, {"ok": True})
-                if ON_QUIT:
-                    threading.Timer(0.2, ON_QUIT).start()
-                return
+                return self._send(405, {"error": "use POST"})
             if p == "/api/show":
                 if ON_SHOW:
                     ON_SHOW()
@@ -1072,6 +1124,11 @@ class Handler(BaseHTTPRequestHandler):
             return self._deny()
         try:
             p, b = self.path, self._body()
+            if p == "/api/quit":
+                self._send(200, {"ok": True})
+                if ON_QUIT:
+                    threading.Timer(0.2, ON_QUIT).start()
+                return
             if p == "/api/ac/test":
                 if BACK is None:
                     return self._send(200, {"text": "Nenhuma conta conectada."})
@@ -1136,6 +1193,8 @@ class Handler(BaseHTTPRequestHandler):
                 BACK, SETUP["tuya"] = None, None
                 return self._send(200, {"ok": True})
             self._send(404, {"error": "not found"})
+        except BadRequest as e:
+            self._send(e.code, {"error": str(e)})
         except Exception as e:
             self._send(500, {"error": str(e)})
 

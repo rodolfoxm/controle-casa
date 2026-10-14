@@ -503,20 +503,61 @@ def _running_version():
         return 0
 
 
+def _port_owner_pid():
+    out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True,
+                         creationflags=0x08000000).stdout
+    for line in out.splitlines():
+        parts = line.split()
+        if len(parts) >= 5 and parts[1].endswith(f":{core.PORT}") and parts[3].upper() in ("LISTENING", "ESCUTANDO"):
+            if parts[4].isdigit() and int(parts[4]) != os.getpid():
+                return int(parts[4])
+    return None
+
+
+def _image_name(pid):
+    out = subprocess.run(["tasklist", "/FI", f"PID eq {pid}", "/FO", "CSV", "/NH"], capture_output=True,
+                         text=True, creationflags=0x08000000).stdout.strip()
+    return out.split('","')[0].strip('"').lower() if out.startswith('"') else ""
+
+
+def _alert(text):
+    try:
+        ctypes.windll.user32.MessageBoxW(None, text, TITLE, 0x30)   # ícone de aviso
+    except Exception:
+        print(text)
+
+
 def _kill_port_owner():
+    """Só encerra quem está na porta se for mesmo uma versão do Controle Casa."""
     if not IS_WIN:
         return
     try:
-        out = subprocess.run(["netstat", "-ano", "-p", "TCP"], capture_output=True, text=True,
-                             creationflags=0x08000000).stdout
-        for line in out.splitlines():
-            parts = line.split()
-            if len(parts) >= 5 and parts[1].endswith(f":{core.PORT}") and parts[3].upper() in ("LISTENING", "ESCUTANDO"):
-                pid = parts[4]
-                if pid.isdigit() and int(pid) != os.getpid():
-                    subprocess.run(["taskkill", "/PID", pid, "/F"], capture_output=True, creationflags=0x08000000)
+        pid = _port_owner_pid()
+        if not pid:
+            return
+        name = _image_name(pid)
+        ours = _running_version() > 0 and name in ("python.exe", "pythonw.exe", "controlecasa.exe")
+        if not ours:
+            _alert(f"A porta {core.PORT} está sendo usada por outro programa ({name or 'desconhecido'}).\n\n"
+                   f"Feche esse programa ou mude o valor de \"port\" em %APPDATA%\\ControleCasa\\config.json.")
+            return
+        subprocess.run(["taskkill", "/PID", str(pid), "/F"], capture_output=True, creationflags=0x08000000)
     except Exception as e:
         print("atualização:", e)
+
+
+def _ask_quit():
+    """Pede para a versão aberta fechar: POST (v12+) e, se não der, o GET das versões 9–11."""
+    import urllib.request
+    for method in ("POST", "GET"):
+        try:
+            req = urllib.request.Request(core.URL + "api/quit", data=b"{}" if method == "POST" else None,
+                                         method=method, headers={core.APP_HEADER: "1",
+                                                                 "Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=2)
+            return
+        except Exception:
+            continue
 
 
 def take_over_or_show():
@@ -532,10 +573,7 @@ def take_over_or_show():
             pass
         return None
     if v:
-        try:
-            urllib.request.urlopen(urllib.request.Request(core.URL + "api/quit", headers={core.APP_HEADER: "1"}), timeout=2)
-        except Exception:
-            pass
+        _ask_quit()
     time.sleep(0.8)
     srv = core.start_server()
     if srv:

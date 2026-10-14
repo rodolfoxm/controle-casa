@@ -31,46 +31,6 @@ class SessionExpired(PositivoError):
     pass
 
 
-# ======================================================================== senha protegida (Windows DPAPI)
-def protect(text):
-    if not text:
-        return ""
-    if sys.platform == "win32":
-        try:
-            return "dpapi:" + base64.b64encode(_dpapi(text.encode("utf-8"), True)).decode()
-        except Exception:
-            pass
-    return "b64:" + base64.b64encode(text.encode("utf-8")).decode()
-
-
-def unprotect(blob):
-    if not blob:
-        return ""
-    kind, _, data = blob.partition(":")
-    raw = base64.b64decode(data)
-    if kind == "dpapi":
-        return _dpapi(raw, False).decode("utf-8")
-    return raw.decode("utf-8")
-
-
-def _dpapi(data, encrypt):
-    import ctypes
-    from ctypes import wintypes
-
-    class BLOB(ctypes.Structure):
-        _fields_ = [("cbData", wintypes.DWORD), ("pbData", ctypes.POINTER(ctypes.c_char))]
-
-    buf = ctypes.create_string_buffer(data, len(data))
-    inp, out = BLOB(len(data), ctypes.cast(buf, ctypes.POINTER(ctypes.c_char))), BLOB()
-    fn = ctypes.windll.crypt32.CryptProtectData if encrypt else ctypes.windll.crypt32.CryptUnprotectData
-    if not fn(ctypes.byref(inp), None, None, None, None, 0x1, ctypes.byref(out)):
-        raise OSError("DPAPI falhou")
-    try:
-        return ctypes.string_at(out.pbData, out.cbData)
-    finally:
-        ctypes.windll.kernel32.LocalFree(out.pbData)
-
-
 # ======================================================================== cores (formato bruto dos aparelhos)
 def _hsv_to_rgb(h, s, v):
     import colorsys

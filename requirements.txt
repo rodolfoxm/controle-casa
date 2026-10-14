@@ -1,4 +1,6 @@
-tinytuya>=1.13
-pywebview>=5.0
-pystray>=0.19
-pillow>=10.0
+# Faixas compatíveis (as mesmas versões principais testadas).
+# O .exe oficial é gerado a partir do requirements.lock, com versões exatas.
+tinytuya~=1.20.0
+pywebview~=6.2.1
+pystray~=0.19.5
+pillow~=12.3.0
