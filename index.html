@@ -1,0 +1,1026 @@
+<!doctype html>
+<html lang="pt-BR" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Controle Casa</title>
+<link rel="icon" href="/icone.png">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* =========================================================================
+   A janela em si é Desktop Acrylic do Windows (DWM). Aqui NÃO há fundo nem
+   desfoque: só os elementos, desenhados por cima do material do sistema.
+   ========================================================================= */
+:root{
+  --ease:cubic-bezier(.16,1,.3,1);          /* desaceleração suave */
+  --spring:cubic-bezier(.34,1.56,.64,1);    /* leve "mola" */
+  --r:20px;
+  --accent:#5cc8ff; --on-accent:#03202e; --glow:rgba(92,200,255,.45);
+}
+html[data-theme="dark"]{
+  --txt:#fff; --mut:rgba(255,255,255,.62); --dim:rgba(255,255,255,.40);
+  --fill:rgba(255,255,255,.065); --fill-h:rgba(255,255,255,.10); --fill-strong:rgba(255,255,255,.16);
+  --stroke:rgba(255,255,255,.11); --hi:rgba(255,255,255,.26); --lo:rgba(0,0,0,.18);
+  --shadow:0 10px 30px rgba(0,0,0,.22);
+  --sheet:rgba(30,32,38,.96); --tint-base:18,20,26;
+  --track:rgba(255,255,255,.10); --thumb:#fff;
+  --unit-a:#ffffff; --unit-b:#d6dbe0; --air:rgba(235,242,250,.85);
+}
+html[data-theme="light"]{
+  --txt:#101216; --mut:rgba(16,18,22,.60); --dim:rgba(16,18,22,.40);
+  --fill:rgba(255,255,255,.42); --fill-h:rgba(255,255,255,.58); --fill-strong:rgba(255,255,255,.72);
+  --stroke:rgba(255,255,255,.75); --hi:rgba(255,255,255,.95); --lo:rgba(0,0,0,.06);
+  --shadow:0 8px 24px rgba(20,30,50,.10);
+  --sheet:rgba(247,248,251,.96); --tint-base:248,249,252;
+  --accent:#0a84ff; --on-accent:#fff; --glow:rgba(10,132,255,.35);
+  --track:rgba(0,0,0,.08); --thumb:#fff;
+  --unit-a:#ffffff; --unit-b:#e4e8ec; --air:rgba(60,90,130,.55);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:transparent;color:var(--txt);
+  font-family:"Segoe UI Variable Text","Segoe UI",Inter,system-ui,sans-serif;font-size:14px;
+  -webkit-user-select:none;user-select:none;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+[hidden]{display:none!important}
+
+/* fora do programa (navegador) não existe acrylic: só um fundo para visualizar */
+html.web body{background:radial-gradient(120% 90% at 30% 0%,#3b3f8f 0%,#1b2340 45%,#0d1018 100%)}
+html.web[data-theme="light"] body{background:radial-gradient(120% 90% at 30% 0%,#dfe7ff 0%,#eef1f6 50%,#e7eaf0 100%)}
+
+/* ---------- fundo preto com vidro nos elementos */
+html.black,html.black body{background:#000}
+html.black .tint{display:none}
+html.black .frame{border-radius:8px;background:none;box-shadow:inset 0 0 0 1px rgba(255,255,255,.08)}
+html.black .bar{background:linear-gradient(180deg,rgba(0,0,0,.92) 55%,rgba(0,0,0,0))}
+html.black{--fill:rgba(255,255,255,.045);--fill-h:rgba(255,255,255,.075);--fill-strong:rgba(255,255,255,.14);
+  --stroke:rgba(255,255,255,.07);--sheet:rgba(14,15,18,.97);--shadow:0 18px 40px rgba(0,0,0,.6)}
+/* borda de vidro: reflexo forte no canto de cima, quase nada embaixo */
+html.black .glass,html.black .chip,html.black .btn.ghost,html.black .pwr{position:relative}
+html.black .glass::after,html.black .chip::after{content:"";position:absolute;inset:0;border-radius:inherit;padding:1px;pointer-events:none;
+  background:linear-gradient(150deg,rgba(255,255,255,.42) 0%,rgba(255,255,255,.10) 22%,rgba(255,255,255,0) 50%,rgba(255,255,255,.04) 78%,rgba(255,255,255,.16) 100%);
+  -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}
+html.black .chip::after{background:linear-gradient(150deg,rgba(255,255,255,.26),rgba(255,255,255,.04) 35%,rgba(255,255,255,0) 60%,rgba(255,255,255,.08))}
+html.black .glass{background:linear-gradient(165deg,rgba(255,255,255,.075) 0%,rgba(255,255,255,.025) 45%,rgba(255,255,255,.04) 100%);
+  border-color:transparent;box-shadow:inset 0 1px 0 rgba(255,255,255,.10),inset 0 0 30px rgba(255,255,255,.02),var(--shadow)}
+html.black .glass::before{background:radial-gradient(120% 70% at 15% -10%,rgba(255,255,255,.10),transparent 55%)}
+html.black .chip{border-color:transparent;background:linear-gradient(165deg,rgba(255,255,255,.07),rgba(255,255,255,.025))}
+/* luz que "vaza" por baixo do vidro quando algo está ligado */
+html.black .ac.lit{box-shadow:inset 0 1px 0 rgba(255,255,255,.10),0 0 0 1px rgba(92,200,255,.05),0 20px 60px -20px rgba(92,200,255,.35),var(--shadow)}
+html.black .dev.on{background:linear-gradient(165deg,color-mix(in srgb,var(--accent) 22%,transparent),rgba(255,255,255,.03));box-shadow:0 12px 34px -14px var(--glow),inset 0 1px 0 rgba(255,255,255,.12)}
+html.black .dev.lit{background:linear-gradient(165deg,color-mix(in srgb,var(--lc) 28%,transparent),rgba(255,255,255,.03));box-shadow:0 14px 38px -14px color-mix(in srgb,var(--lc) 70%,transparent),inset 0 1px 0 rgba(255,255,255,.12)}
+html.black .acryl-only{display:none}
+html.black .tile.act,html.black .ch.on,html.black .acopt.sel{background:linear-gradient(165deg,color-mix(in srgb,var(--accent) 24%,transparent),rgba(255,255,255,.03))}
+html.black .sheet.glass{background:linear-gradient(165deg,rgba(30,32,38,.98),rgba(12,13,16,.98))}
+html.black .shade{background:rgba(0,0,0,.55)}
+html.black .unit{box-shadow:0 10px 30px rgba(0,0,0,.6),0 0 40px -10px rgba(255,255,255,.12)}
+
+/* camada de tonalidade (deixa o vidro mais sólido, se quiser) */
+.tint{position:fixed;inset:0;z-index:0;pointer-events:none;background:rgba(var(--tint-base),var(--tint,0));transition:background .4s var(--ease)}
+/* brilho e borda da janela: reflexos sutis nas extremidades */
+.frame{position:fixed;inset:0;z-index:20;pointer-events:none;border-radius:8px;
+  box-shadow:inset 0 0 0 1px var(--stroke),inset 0 1px 0 var(--hi);
+  background:
+    radial-gradient(140% 40% at 0% 0%,rgba(255,255,255,.10),transparent 55%),
+    linear-gradient(180deg,rgba(255,255,255,.06),transparent 18%)}
+html[data-theme="light"] .frame{background:radial-gradient(140% 40% at 0% 0%,rgba(255,255,255,.35),transparent 55%)}
+
+/* ---------- material dos cartões (sem blur: é o vidro do sistema que aparece) */
+.glass{position:relative;border-radius:var(--r);background:var(--fill);
+  border:1px solid var(--stroke);
+  box-shadow:inset 0 1px 0 var(--hi),inset 0 -1px 0 var(--lo),var(--shadow);
+  transition:background .35s var(--ease),border-color .35s var(--ease),box-shadow .35s var(--ease),transform .25s var(--ease)}
+.glass::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(160deg,rgba(255,255,255,.10) 0%,transparent 35%,transparent 75%,rgba(255,255,255,.04) 100%)}
+html[data-theme="light"] .glass::before{background:linear-gradient(160deg,rgba(255,255,255,.55) 0%,transparent 40%)}
+.chip{background:var(--fill);border:1px solid var(--stroke);border-radius:15px;box-shadow:inset 0 1px 0 var(--hi);
+  transition:background .3s var(--ease),border-color .3s var(--ease),transform .2s var(--ease)}
+.chip:hover{background:var(--fill-h)}
+.press:active,.chip:active,.btn:active{transform:scale(.97)}
+
+/* ---------- barra superior (sem barra de título do sistema) */
+.bar{position:fixed;top:0;left:0;right:0;height:44px;z-index:10;display:flex;align-items:center;justify-content:space-between;padding:0 10px 0 16px}
+.bar .t{display:flex;align-items:center;gap:8px;font-weight:600;font-size:13px;letter-spacing:.1px;pointer-events:none}
+.bar .t svg{width:16px;height:16px}
+.wb{display:flex;gap:4px}
+.wbtn{width:30px;height:30px;border-radius:50%;border:0;background:transparent;color:var(--mut);display:grid;place-items:center;transition:background .25s var(--ease),color .25s}
+.wbtn:hover{background:var(--fill-h);color:var(--txt)}
+.wbtn.x:hover{background:#e5484d;color:#fff}
+.wbtn svg{width:14px;height:14px}
+
+main{position:relative;z-index:1;height:100%;overflow-y:auto;padding:48px 14px 18px;scroll-behavior:smooth}
+main::-webkit-scrollbar{width:5px}
+main::-webkit-scrollbar-thumb{background:var(--fill-strong);border-radius:5px}
+.wrap{max-width:400px;margin:0 auto;display:flex;flex-direction:column;gap:12px}
+.rise>*{animation:rise .7s var(--ease) both}
+.rise>*:nth-child(2){animation-delay:.05s}.rise>*:nth-child(3){animation-delay:.1s}
+.rise>*:nth-child(4){animation-delay:.14s}.rise>*:nth-child(5){animation-delay:.18s}.rise>*:nth-child(n+6){animation-delay:.22s}
+@keyframes rise{from{opacity:0;transform:translateY(10px) scale(.985)}}
+
+/* ---------- ar-condicionado */
+.ac{padding:16px 16px 12px}
+.top{display:flex;align-items:center;justify-content:space-between}
+.room{display:flex;align-items:center;gap:8px;font-weight:600}
+.room small{color:var(--mut);font-weight:500;font-size:14px}
+.room svg{width:14px;height:14px;opacity:.6}
+.pwr{width:40px;height:40px;border-radius:50%;border:1px solid var(--stroke);display:grid;place-items:center;
+  background:var(--fill-h);color:var(--mut);box-shadow:inset 0 1px 0 var(--hi);transition:all .4s var(--ease)}
+.pwr.on{background:var(--accent);color:var(--on-accent);border-color:transparent;box-shadow:0 0 22px var(--glow),inset 0 1px 0 rgba(255,255,255,.55)}
+.pwr svg{width:17px;height:17px}
+.unit{position:relative;margin:10px auto 0;width:80%;height:62px;border-radius:12px 12px 18px 18px;
+  background:linear-gradient(180deg,var(--unit-a) 0%,var(--unit-b) 100%);box-shadow:0 8px 22px rgba(0,0,0,.18),inset 0 -2px 0 rgba(0,0,0,.05)}
+.unit .disp{position:absolute;right:12%;top:12px;font-weight:600;font-size:13px;color:#2b8ff0;transition:opacity .4s}
+.unit .dot{position:absolute;right:14.5%;top:30px;width:3px;height:3px;border-radius:50%;background:#2b8ff0;transition:opacity .4s}
+.unit .slot{position:absolute;left:7%;right:7%;bottom:10px;height:8px;border-radius:3px;background:#1b1d22}
+.unit.off .disp,.unit.off .dot{opacity:0}
+.air{display:block;width:100%;height:88px;margin-top:-4px}
+.air path{stroke:var(--air);stroke-width:1;fill:none;stroke-dasharray:5 18;opacity:.55;animation:flow 1.4s linear infinite;transition:opacity .8s var(--ease)}
+.air.off path{opacity:0}
+.air.turbo path{animation-duration:.7s;opacity:.8}
+.air.heat path{stroke:#ff9f5a}
+@keyframes flow{to{stroke-dashoffset:-23}}
+.temp{font-size:54px;font-weight:600;line-height:1;margin-top:-2px;display:flex;align-items:flex-start;gap:3px;letter-spacing:-1.5px;font-variant-numeric:tabular-nums}
+.temp sup{font-size:17px;font-weight:500;color:var(--mut);margin-top:8px;letter-spacing:0}
+.slider{display:flex;align-items:center;gap:10px;margin-top:12px}
+.rnd{width:36px;height:36px;flex:none;border-radius:50%;font-size:19px;display:grid;place-items:center;color:var(--txt)}
+input[type=range]{-webkit-appearance:none;appearance:none;outline:none;cursor:pointer;background:transparent}
+.slider input{flex:1;height:36px;border-radius:20px;padding:0 3px;background:var(--track);box-shadow:inset 0 1px 2px var(--lo)}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:30px;height:30px;border-radius:50%;background:var(--thumb);
+  box-shadow:0 2px 8px rgba(0,0,0,.25),0 0 0 .5px rgba(0,0,0,.06);border:0;transition:transform .25s var(--spring)}
+input[type=range]:active::-webkit-slider-thumb{transform:scale(1.08)}
+.range-lbl{display:flex;justify-content:space-between;color:var(--dim);font-size:11px;margin:6px 50px 0 56px}
+.tiles{display:grid;grid-template-columns:1fr 1fr 1.3fr;gap:8px;margin-top:14px}
+.tile{padding:11px 12px;min-height:82px;display:flex;flex-direction:column;justify-content:space-between;cursor:pointer}
+.tile.act{background:color-mix(in srgb,var(--accent) 18%,transparent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.tile .ic{width:17px;height:17px;color:var(--mut);transition:color .3s}
+.tile.act .ic{color:var(--accent)}
+.tile .lbl{color:var(--mut);font-size:12px}
+.tile .val{font-weight:600;font-size:13.5px;margin-top:1px}
+.tile .row{display:flex;justify-content:space-between;align-items:flex-start}
+.tg{width:38px;height:22px;border-radius:20px;background:var(--fill-strong);position:relative;flex:none;
+  box-shadow:inset 0 1px 2px var(--lo);transition:background .35s var(--ease)}
+.tg::after{content:"";position:absolute;top:2px;left:2px;width:18px;height:18px;border-radius:50%;background:#fff;
+  box-shadow:0 1px 3px rgba(0,0,0,.3);transition:left .4s var(--spring)}
+.tg.on{background:var(--accent)}
+.tg.on::after{left:18px}
+.foot{display:flex;justify-content:space-between;align-items:center;margin-top:12px;color:var(--mut);font-size:12px}
+.foot span{display:flex;align-items:center;gap:6px}
+.foot svg{width:14px;height:14px}
+.icbtn{background:none;border:0;color:var(--mut);padding:5px;border-radius:9px;display:grid;place-items:center;transition:background .25s}
+.icbtn:hover{background:var(--fill-h)}
+.icbtn.spin svg{animation:sp .8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+.badge{font-size:10px;background:rgba(242,193,78,.2);color:#d9a521;padding:2px 7px;border-radius:8px}
+.ctl{transition:opacity .5s var(--ease)}
+.disabled .ctl{opacity:.38;pointer-events:none}
+.err{color:#e5484d;font-size:12px;text-align:center;margin-top:6px}
+html[data-theme="dark"] .err{color:#ff8f8a}
+.err:empty{display:none}
+
+/* ---------- casa */
+.sec{display:flex;justify-content:space-between;align-items:center;margin:4px 4px 0}
+.sec h2{font-size:12.5px;font-weight:600;color:var(--mut);letter-spacing:.2px}
+.pill{border-radius:11px;padding:5px 11px;font-size:12px;font-weight:500}
+.devs{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.dev{padding:11px 12px;cursor:pointer;display:flex;flex-direction:column;gap:10px;min-height:76px;--r:17px}
+.dev:hover{background:var(--fill-h)}
+.dev:active{transform:scale(.975)}
+.dev.on{background:color-mix(in srgb,var(--accent) 17%,var(--fill));border-color:color-mix(in srgb,var(--accent) 38%,transparent)}
+.dev.lit{background:color-mix(in srgb,var(--lc) 24%,var(--fill));border-color:color-mix(in srgb,var(--lc) 45%,transparent)}
+.dev.off-line{opacity:.45;cursor:not-allowed}
+.dev.wide{grid-column:1/-1;cursor:default}
+.dev.wide:active{transform:none}
+.dev .n{font-weight:600;font-size:13px;line-height:1.25}
+.dev .s{color:var(--mut);font-size:11px;margin-top:1px}
+.dev .row{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.dev .ic{width:16px;height:16px;color:var(--mut);transition:color .3s}
+.dev.on .ic{color:var(--accent)}
+.dev.lit .ic{color:var(--lc)}
+.dev .tg{width:32px;height:19px}
+.dev .tg::after{width:15px;height:15px}
+.dev .tg.on::after{left:15px}
+.dev .adj{position:absolute;right:8px;bottom:8px;width:26px;height:26px;border-radius:9px;border:0;background:var(--fill-h);color:var(--txt);display:grid;place-items:center;transition:background .2s}
+.dev .adj:hover{background:var(--fill-strong)}
+.dev .adj svg{width:13px;height:13px}
+.chans{display:grid;grid-template-columns:repeat(auto-fit,minmax(84px,1fr));gap:6px}
+.ch{border-radius:12px;padding:8px 10px;cursor:pointer;font-size:12px;font-weight:500;display:flex;justify-content:space-between;align-items:center;gap:6px}
+.ch.on{background:color-mix(in srgb,var(--accent) 20%,var(--fill));border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.ch i{width:6px;height:6px;border-radius:50%;background:var(--fill-strong);flex:none;transition:all .3s}
+.ch.on i{background:var(--accent);box-shadow:0 0 8px var(--glow)}
+.empty{color:var(--mut);font-size:12px;padding:4px}
+
+/* ---------- cômodos */
+main{overflow-x:hidden}
+.wrap,.wrap>*,.rooms,.room-sec{min-width:0;max-width:100%}
+.roombar{min-width:0;max-width:100%;display:flex;gap:6px;overflow-x:auto;padding:2px 2px 4px;margin:2px -2px 0;scrollbar-width:none;
+  -webkit-mask:linear-gradient(90deg,#000 92%,transparent);mask:linear-gradient(90deg,#000 92%,transparent)}
+.roombar::-webkit-scrollbar{display:none}
+.rchip{flex:none;border-radius:20px;padding:7px 13px;font-size:12.5px;font-weight:500;color:var(--mut);cursor:pointer;white-space:nowrap;
+  display:flex;align-items:center;gap:6px}
+.rchip b{font-weight:600;font-size:10.5px;min-width:16px;height:16px;padding:0 4px;border-radius:8px;display:inline-grid;place-items:center;
+  background:var(--fill-strong);color:var(--txt)}
+.rchip.sel{color:var(--txt);background:var(--fill-strong)}
+html.black .rchip.sel{background:linear-gradient(165deg,rgba(255,255,255,.16),rgba(255,255,255,.06))}
+.rchip.sel b{background:var(--accent);color:var(--on-accent)}
+.rchip.off-all{margin-left:auto}
+.rooms{display:flex;flex-direction:column;gap:14px}
+.room-sec{display:flex;flex-direction:column;gap:8px;animation:rise .5s var(--ease) both}
+.room-hd{display:flex;align-items:center;justify-content:space-between;margin:0 4px}
+.room-hd h3{font-size:14px;font-weight:600;display:flex;align-items:baseline;gap:8px}
+.room-hd h3 small{font-size:11.5px;font-weight:500;color:var(--mut)}
+.room-hd .pill{padding:4px 10px;font-size:11.5px}
+.room-sec .devs{grid-template-columns:1fr 1fr}
+
+/* ---------- folhas flutuantes */
+.shade{position:fixed;inset:0;z-index:30;display:flex;align-items:flex-end;justify-content:center;padding:52px 10px 10px;
+  background:rgba(0,0,0,.18);opacity:0;pointer-events:none;transition:opacity .35s var(--ease)}
+html[data-theme="light"] .shade{background:rgba(0,0,0,.08)}
+.shade.open{opacity:1;pointer-events:auto}
+.sheet{width:100%;max-width:400px;max-height:100%;overflow-y:auto;padding:16px 16px 18px;--r:22px;
+  background:var(--sheet);transform:translateY(28px) scale(.97);transition:transform .5s var(--ease)}
+.shade.open .sheet{transform:none}
+.sheet .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
+.sheet .hd b{font-size:15px}
+.sheet .x{width:28px;height:28px;border-radius:50%;border:0;background:var(--fill-h);font-size:15px;color:var(--mut)}
+.sheet label{display:flex;justify-content:space-between;color:var(--mut);font-size:12px;margin:14px 0 7px}
+.sheet input[type=range]{width:100%;height:28px;border-radius:16px;padding:0 2px}
+.sheet input[type=range]::-webkit-slider-thumb{width:24px;height:24px}
+#sBright{background:linear-gradient(90deg,#3a3d44,#fff)}
+#sTemp{background:linear-gradient(90deg,#ffb35c,#fff5e6,#cfe6ff)}
+#sHue{background:linear-gradient(90deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)}
+#uTint{background:linear-gradient(90deg,var(--track),rgba(var(--tint-base),1));box-shadow:inset 0 0 0 1px var(--stroke)}
+.sw{display:flex;gap:9px;flex-wrap:wrap;margin-top:10px}
+.sw button{width:28px;height:28px;border-radius:50%;border:2px solid transparent;transition:transform .25s var(--spring)}
+.sw button:hover{transform:scale(1.1)}
+.sw button.sel{border-color:var(--txt)}
+.seg{display:flex;padding:3px;gap:3px;border-radius:12px;position:relative}
+.seg button{flex:1;border:0;background:none;color:var(--mut);font-weight:500;font-size:12.5px;padding:7px;border-radius:9px;transition:all .3s var(--ease)}
+.seg button.sel{background:var(--fill-strong);color:var(--txt);box-shadow:0 1px 3px var(--lo),inset 0 1px 0 var(--hi)}
+.opt{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:11px 12px;margin-top:8px;cursor:pointer}
+.opt span{font-size:13px}
+.opt small{display:block;color:var(--mut);font-size:11px;margin-top:2px;line-height:1.4}
+.grp{font-size:11px;font-weight:600;color:var(--dim);text-transform:uppercase;letter-spacing:.8px;margin:18px 2px 2px}
+
+/* ---------- assistente */
+.setup{padding:20px 18px 18px;display:flex;flex-direction:column;gap:14px}
+.dots{display:flex;gap:6px;justify-content:center}
+.dots i{width:6px;height:6px;border-radius:4px;background:var(--fill-strong);transition:all .45s var(--ease)}
+.dots i.on{width:18px;background:var(--accent)}
+.setup h1{font-size:20px;font-weight:700;letter-spacing:-.3px}
+.setup p{color:var(--mut);line-height:1.5;font-size:13px}
+[data-step]{animation:rise .55s var(--ease) both}
+.hero{display:grid;place-items:center;padding:8px 0 4px}
+.hero svg{width:56px;height:56px;color:var(--accent);filter:drop-shadow(0 6px 18px var(--glow))}
+.steps{list-style:none;counter-reset:s;display:flex;flex-direction:column;gap:8px}
+.steps li{counter-increment:s;display:flex;gap:10px;padding:10px 12px;font-size:12.5px;line-height:1.45}
+.steps li::before{content:counter(s);flex:none;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--accent) 20%,transparent);
+  color:var(--accent);font-weight:700;font-size:11px;display:grid;place-items:center;margin-top:1px}
+.btn{border:0;border-radius:14px;padding:12px 16px;font-weight:600;font-size:13.5px;background:var(--accent);color:var(--on-accent);
+  box-shadow:0 6px 18px var(--glow),inset 0 1px 0 rgba(255,255,255,.45);transition:filter .2s,transform .2s var(--ease)}
+.btn:hover{filter:brightness(1.07)}
+.btn:disabled{opacity:.55;cursor:wait}
+.btn.ghost{background:var(--fill-h);color:var(--txt);box-shadow:inset 0 1px 0 var(--hi);border:1px solid var(--stroke)}
+.btns{display:flex;flex-direction:column;gap:8px}
+.btns.row{flex-direction:row}.btns.row .btn{flex:1}
+.field{display:flex;flex-direction:column;gap:6px}
+.field span{font-size:12px;color:var(--mut)}
+.inp{width:100%;padding:11px 12px;border-radius:12px;background:var(--fill);border:1px solid var(--stroke);outline:none;font-size:13px;
+  -webkit-user-select:text;user-select:text;transition:border-color .25s,box-shadow .25s}
+.inp:focus{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 22%,transparent)}
+select.inp option{background:#202228;color:#fff}
+.pw{position:relative}.pw .inp{padding-right:40px}
+.pw button{position:absolute;right:6px;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--mut);padding:6px}
+.msg{font-size:12.5px;padding:10px 12px;border-radius:12px;line-height:1.45}
+.msg.bad{background:rgba(229,72,77,.13);color:#e5484d;border:1px solid rgba(229,72,77,.25)}
+html[data-theme="dark"] .msg.bad{color:#ffaaa5}
+.msg.good{background:rgba(48,164,108,.14);color:#2a9d62;border:1px solid rgba(48,164,108,.28)}
+html[data-theme="dark"] .msg.good{color:#8ff0bd}
+.link{background:none;border:0;color:var(--accent);font-weight:500;font-size:12.5px;padding:0;text-decoration:underline;text-underline-offset:3px}
+.spin{width:14px;height:14px;border:2px solid rgba(255,255,255,.35);border-top-color:currentColor;border-radius:50%;display:inline-block;animation:sp .7s linear infinite;vertical-align:-2px;margin-right:6px}
+.dlist{display:flex;flex-direction:column;gap:6px}
+.drow{display:flex;align-items:center;gap:10px;padding:7px 10px}
+.drow .ic{width:16px;height:16px;flex:none;color:var(--accent)}
+.drow.hid{opacity:.45}
+.drow .inp{padding:7px 9px;font-size:12.5px;background:transparent;border-color:transparent}
+.drow .inp:hover,.drow .inp:focus{background:var(--fill);border-color:var(--stroke)}
+.drow .eye{border:0;background:none;color:var(--mut);padding:5px;border-radius:8px;flex:none}
+.drow .eye:hover{background:var(--fill-h)}
+.drow .eye svg{width:16px;height:16px}
+.drow select.room{flex:none;width:auto;max-width:96px;padding:5px 6px;font-size:11.5px;border-radius:9px;background:var(--fill);border:1px solid var(--stroke);color:var(--mut)}
+.subch{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:0 10px 8px 36px}
+.subch .inp{padding:6px 8px;font-size:12px}
+.acopt{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer}
+.acopt.sel{border-color:color-mix(in srgb,var(--accent) 55%,transparent);background:color-mix(in srgb,var(--accent) 14%,var(--fill))}
+.acopt i{width:16px;height:16px;border-radius:50%;border:2px solid var(--dim);flex:none;transition:all .3s var(--spring)}
+.acopt.sel i{border:5px solid var(--accent)}
+.acopt small{color:var(--mut);font-size:11px;display:block}
+.muted{color:var(--mut);font-size:12px}
+.qr{display:grid;place-items:center;padding:14px}
+.qr svg{width:64px;height:64px;color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="tint"></div>
+<div class="frame"></div>
+
+<header class="bar" id="bar">
+  <div class="t"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 10.5 12 3.5l9.5 7"/><path d="M5 12v8.5h14V12"/><path d="M16.5 3.5H19V6"/></svg>Casa</div>
+  <div class="wb">
+    <button class="wbtn" id="btnSettings" title="Ajustes" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
+    <button class="wbtn nat" id="btnMin" title="Minimizar" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 12h12"/></svg></button>
+    <button class="wbtn x nat" id="btnClose" title="Fechar (continua na bandeja)" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 7l10 10M17 7 7 17"/></svg></button>
+  </div>
+</header>
+
+<main id="scroll"><div class="wrap">
+
+  <!-- ================= ASSISTENTE ================= -->
+  <section id="setup" class="glass setup" hidden>
+    <div class="dots" id="dots"><i></i><i></i><i></i><i></i><i></i></div>
+
+    <div data-step="0">
+      <div class="hero"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 10.5 12 3.5l9.5 7"/><path d="M5 12v8.5h14V12"/><path d="M16.5 3.5H19V6"/></svg></div>
+      <h1>Bem-vindo ao Controle Casa</h1>
+      <p style="margin:8px 0 18px">Controle o ar-condicionado, as luzes e as tomadas do seu Smart Life direto do PC. A configuração é feita uma vez só.</p>
+      <div class="btns">
+        <button class="btn" data-go="1">Conectar minha conta Smart Life</button>
+        <button class="btn ghost" id="goDemo">Só quero ver a demonstração</button>
+      </div>
+    </div>
+
+    <div data-step="1" hidden>
+      <h1>Crie sua chave de acesso</h1>
+      <p style="margin:6px 0 12px">O Smart Life libera o controle pelo PC através da plataforma gratuita da Tuya, a empresa por trás do app.</p>
+      <ol class="steps">
+        <li class="chip"><div>Entre em <button class="link" data-url="https://platform.tuya.com">platform.tuya.com</button> e crie uma conta grátis.</div></li>
+        <li class="chip"><div>Vá em <b>Cloud → Development → Create Cloud Project</b>. Escolha <b>Smart Home</b> nos dois campos e o data center <b>Western America</b>.</div></li>
+        <li class="chip"><div>Na tela de serviços, mantenha <b>IoT Core</b>, <b>Authorization</b>, <b>Smart Home Basic</b> e adicione <b>IR Control Hub Open Service</b> (para o ar).</div></li>
+        <li class="chip"><div>Na aba <b>Overview</b> do projeto, copie o <b>Access ID</b> e o <b>Access Secret</b>.</div></li>
+      </ol>
+      <div class="btns row" style="margin-top:14px">
+        <button class="btn ghost" data-go="0">Voltar</button>
+        <button class="btn" data-go="2">Já tenho as chaves</button>
+      </div>
+    </div>
+
+    <div data-step="2" hidden>
+      <h1>Cole suas chaves</h1>
+      <p style="margin:6px 0 14px">Elas ficam salvas só neste computador.</p>
+      <div style="display:flex;flex-direction:column;gap:12px">
+        <label class="field"><span>Access ID / Client ID</span><input class="inp" id="fId" autocomplete="off" spellcheck="false"></label>
+        <label class="field"><span>Access Secret / Client Secret</span>
+          <div class="pw"><input class="inp" id="fSecret" type="password" autocomplete="off" spellcheck="false">
+          <button type="button" id="eyeSecret" title="Mostrar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></label>
+        <label class="field"><span>Data center</span><select class="inp" id="fRegion"><option value="auto">Detectar automaticamente</option></select></label>
+        <div id="testMsg" class="msg" hidden></div>
+      </div>
+      <div class="btns row" style="margin-top:16px">
+        <button class="btn ghost" data-go="1">Voltar</button>
+        <button class="btn" id="btnTest">Conectar</button>
+      </div>
+    </div>
+
+    <div data-step="3" hidden>
+      <h1>Vincule o app Smart Life</h1>
+      <p style="margin:6px 0 12px">A chave funcionou, mas o projeto ainda não enxerga seus aparelhos. Falta ligar a sua conta do app:</p>
+      <div class="qr chip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/></svg></div>
+      <ol class="steps" style="margin-top:10px">
+        <li class="chip"><div>No projeto da Tuya, abra a aba <b>Devices → Link App Account → Add App Account</b>. Vai aparecer um QR Code.</div></li>
+        <li class="chip"><div>No celular, abra o <b>Smart Life → Eu</b> e toque no ícone de <b>leitor</b> no canto de cima. Escaneie e confirme.</div></li>
+      </ol>
+      <div id="linkMsg" class="msg" hidden style="margin-top:10px"></div>
+      <div class="btns row" style="margin-top:14px">
+        <button class="btn ghost" data-go="2">Voltar</button>
+        <button class="btn" id="btnRecheck">Já vinculei, verificar</button>
+      </div>
+    </div>
+
+    <div data-step="4" hidden>
+      <h1>Sua casa</h1>
+      <p style="margin:6px 0 4px" id="foundTxt">Encontrei estes aparelhos.</p>
+      <div class="grp">Ar-condicionado</div>
+      <div id="acList" class="dlist"></div>
+      <label class="field" style="margin-top:8px"><span>Nome do cômodo do ar</span><input class="inp" id="fRoom" value="Quarto"></label>
+      <div class="opt chip" id="fCool"><div><span>Meu ar só resfria</span><small>Esconde o modo Aquecer (ar "só frio")</small></div><div class="tg"></div></div>
+      <label class="field" id="sensorBox" style="margin-top:8px" hidden><span>Sensor de temperatura do cômodo (opcional)</span><select class="inp" id="fSensor"></select></label>
+      <div class="grp">Cômodos</div>
+      <label class="field"><span>Cômodos da casa, separados por vírgula</span><input class="inp" id="fRooms" placeholder="Sala, Cozinha, Quarto"></label>
+      <div class="grp">Aparelhos <span style="text-transform:none;letter-spacing:0;font-weight:400">— renomeie ou esconda tocando no olho</span></div>
+      <div id="devList" class="dlist"></div>
+      <div id="saveMsg" class="msg bad" hidden style="margin-top:10px"></div>
+      <div class="btns" style="margin-top:14px"><button class="btn" id="btnSave">Concluir</button></div>
+    </div>
+  </section>
+
+  <!-- ================= PAINEL ================= -->
+  <section id="panel" class="wrap" hidden>
+    <div class="glass ac" id="card">
+      <div class="top">
+        <div class="room">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 14.76V3.5a2 2 0 0 0-4 0v11.26a4 4 0 1 0 4 0z"/></svg>
+          <span id="roomName">Quarto</span> <small id="roomTemp"></small>
+        </div>
+        <button class="pwr press" id="pwr" title="Ligar/Desligar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M12 3v8"/><path d="M6.3 7.3a8 8 0 1 0 11.4 0"/></svg></button>
+      </div>
+      <div class="unit" id="unit"><div class="disp" id="disp">18</div><div class="dot"></div><div class="slot"></div></div>
+      <svg class="air" id="air" viewBox="0 0 340 88" preserveAspectRatio="none"></svg>
+      <div class="temp"><span id="tval">18</span><sup>°C</sup></div>
+      <div class="ctl">
+        <div class="slider">
+          <button class="rnd chip" id="minus">−</button>
+          <input type="range" id="range" min="17" max="30" step="1" value="18">
+          <button class="rnd chip" id="plus">+</button>
+        </div>
+        <div class="range-lbl"><span id="rMin">17°</span><span id="rMax">30°</span></div>
+        <div class="tiles">
+          <div class="tile chip" id="tMode">
+            <svg class="ic" id="modeIc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"></svg>
+            <div><div class="lbl">Modo</div><div class="val" id="modeVal">Resfriar</div></div>
+          </div>
+          <div class="tile chip" id="tFan">
+            <svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M12 12c-3-4-2-8 1-8s3 3 1 5"/><path d="M12 12c4-3 8-2 8 1s-3 3-5 1"/><path d="M12 12c3 4 2 8-1 8s-3-3-1-5"/><path d="M12 12c-4 3-8 2-8-1s3-3 5-1"/></svg>
+            <div><div class="lbl">Ventilação</div><div class="val" id="fanVal">Auto</div></div>
+          </div>
+          <div class="tile chip" id="tTurbo">
+            <div class="row"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M3 8h11a3 3 0 1 0-3-3"/><path d="M3 12h16a3 3 0 1 1-3 3"/><path d="M3 16h7"/></svg><div class="tg" id="turboTg"></div></div>
+            <div><div class="lbl">Turbo</div><div class="val" id="turboVal">Ligado</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="foot">
+        <span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+          <span id="status">Atualizado</span> <span class="badge" id="demo" hidden>Demo</span></span>
+        <button class="icbtn" id="refresh" title="Atualizar"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M20 12a8 8 0 0 1-14.3 5"/><path d="M4 12a8 8 0 0 1 14.3-5"/><path d="M18 3v4h-4"/><path d="M6 21v-4h4"/></svg></button>
+      </div>
+      <div class="err" id="err"></div>
+    </div>
+
+    <div class="roombar" id="roomBar"></div>
+    <div id="rooms" class="rooms"></div>
+  </section>
+</div></main>
+
+<!-- lâmpada -->
+<div class="shade" id="shade">
+  <div class="sheet glass">
+    <div class="hd"><b id="sName">Lâmpada</b><button class="x" data-close>×</button></div>
+    <div class="seg chip" id="sSeg"><button data-m="white">Branco</button><button data-m="colour">Cor</button></div>
+    <label><span>Brilho</span><span id="sBrightV">80%</span></label>
+    <input type="range" id="sBright" min="1" max="100">
+    <div id="sWhite"><label><span>Tom</span><span>quente · frio</span></label><input type="range" id="sTemp" min="0" max="100"></div>
+    <div id="sColour"><label><span>Cor</span></label><input type="range" id="sHue" min="0" max="359"><div class="sw" id="sSw"></div></div>
+  </div>
+</div>
+
+<!-- diagnóstico -->
+<div class="shade" id="diag">
+  <div class="sheet glass">
+    <div class="hd"><b>Diagnóstico</b><button class="x" data-close>×</button></div>
+    <p class="muted" style="margin-bottom:10px">Se algo não funcionar, copie este relatório e mande pra quem está te ajudando. Ele não inclui suas chaves.</p>
+    <textarea id="diagTxt" class="inp" readonly style="height:300px;resize:none;font:11.5px/1.45 Consolas,monospace;white-space:pre-wrap"></textarea>
+    <div class="btns row" style="margin-top:12px"><button class="btn ghost" id="diagRun" style="padding:12px 8px">Geral</button><button class="btn ghost" id="acTest" style="padding:12px 8px;white-space:nowrap">Testar o ar</button><button class="btn" id="diagCopy" style="padding:12px 8px">Copiar</button></div>
+    <p class="muted" style="margin-top:8px;font-size:11px">"Testar o ar" tenta cada forma de comando e liga o ar a 24°C.</p>
+  </div>
+</div>
+
+<!-- conta Positivo -->
+<div class="shade" id="posSheet">
+  <div class="sheet glass">
+    <div class="hd"><b>Conta Positivo</b><button class="x" data-close>×</button></div>
+    <p class="muted" style="margin-bottom:12px;line-height:1.5">Entre com o mesmo e-mail e senha do app <b>Positivo Casa Inteligente</b>. Os aparelhos continuam no app da Positivo, então a Alexa segue funcionando. A senha fica guardada protegida pelo Windows, só neste computador.</p>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <label class="field"><span>E-mail</span><input class="inp" id="pEmail" autocomplete="off" spellcheck="false"></label>
+      <label class="field"><span>Senha</span><div class="pw"><input class="inp" id="pPass" type="password" autocomplete="off">
+        <button type="button" id="eyePos" title="Mostrar"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg></button></div></label>
+      <div id="posMsg" class="msg" hidden></div>
+    </div>
+    <div class="btns row" style="margin-top:14px">
+      <button class="btn ghost" id="posOff" hidden>Desconectar</button>
+      <button class="btn" id="posOn">Conectar</button>
+    </div>
+    <p class="muted" style="margin-top:10px;font-size:11px;line-height:1.45">Conexão não oficial: usa o mesmo caminho do app do celular. Se a Positivo mudar o app, ela pode parar de funcionar.</p>
+  </div>
+</div>
+
+<!-- ajustes -->
+<div class="shade" id="settings">
+  <div class="sheet glass">
+    <div class="hd"><b>Ajustes <small class="muted" id="ver" style="font-weight:400"></small></b><button class="x" data-close>×</button></div>
+    <div class="grp" style="margin-top:4px">Aparência</div>
+    <div class="seg chip" id="uBack"><button data-b="black">Preto</button><button data-b="acrylic">Vidro do Windows</button></div>
+    <p class="muted" id="backNote" style="margin:6px 2px 10px;font-size:11px" hidden>Vale na próxima vez que o programa abrir.</p>
+    <div class="acryl-only">
+    <div class="seg chip" id="uTheme"><button data-t="auto">Automático</button><button data-t="light">Claro</button><button data-t="dark">Escuro</button></div>
+    <label><span>Solidez do vidro</span><span id="uTintV">12%</span></label>
+    <input type="range" id="uTint" min="0" max="80">
+    <p class="muted" id="glassInfo" style="margin-top:8px;font-size:11px;line-height:1.45"></p>
+    </div>
+    <div class="grp">Casa</div>
+    <div class="opt chip" id="oDevices"><div><span>Gerenciar aparelhos</span><small>Renomear, esconder, escolher o ar</small></div><span>›</span></div>
+    <div class="opt chip" id="oAccount"><div><span>Conta Smart Life</span><small id="oAccountSub">Trocar chaves de acesso</small></div><span>›</span></div>
+    <div class="opt chip" id="oPos"><div><span>Conta Positivo</span><small id="oPosSub">Lâmpadas e tomadas do app Positivo Casa Inteligente</small></div><span>›</span></div>
+    <div class="opt chip" id="oDiag"><div><span>Diagnóstico</span><small>Testa a conexão e mostra o que cada aparelho responde</small></div><span>›</span></div>
+    <div class="grp nat" hidden>Programa</div>
+    <div class="opt chip nat" id="oAuto" hidden><div><span>Iniciar com o Windows</span><small>Abre direto na bandeja</small></div><div class="tg"></div></div>
+    <div class="opt chip nat" id="oQuit" hidden><div><span>Sair do Controle Casa</span><small>Fecha também o ícone da bandeja</small></div><span>›</span></div>
+  </div>
+</div>
+
+<script>
+
+const $ = id => document.getElementById(id);
+const UI_VERSION = 11;
+const OLD_ENGINE = "O programa antigo ainda está aberto. Clique com o botão direito na casinha da bandeja → Sair, e abra de novo pelo Iniciar.bat.";
+const api = async (path, body) => {
+  const r = await fetch(path, body ? {method:"POST",headers:{"Content-Type":"application/json","X-Controle-Casa":"1"},body:JSON.stringify(body)}
+                                   : {headers:{"X-Controle-Casa":"1"}});
+  const j = await r.json();
+  if (r.status === 404 && path.startsWith("/api/")) throw new Error(OLD_ENGINE);
+  if (!r.ok) throw new Error(j.error || r.status); return j;
+};
+const native = () => window.pywebview && window.pywebview.api;
+const openUrl = u => native() ? pywebview.api.open_url(u) : window.open(u, "_blank");
+
+let CONF = null, S = null, busy = 0, sendTimer = null, poll = null;
+
+/* ================= aparência ================= */
+const mq = matchMedia("(prefers-color-scheme: dark)");
+function resolveTheme(){
+  const t = (CONF && CONF.ui.theme) || "auto";
+  return t === "auto" ? (mq.matches ? "dark" : "light") : t;
+}
+function applyUI(ui){
+  const black = (ui.backdrop || "black") === "black";
+  document.documentElement.classList.toggle("black", black);
+  document.documentElement.dataset.theme = black ? "dark" : resolveTheme();
+  [...$("uBack").children].forEach(b => b.classList.toggle("sel", b.dataset.b === (ui.backdrop || "black")));
+  document.documentElement.style.setProperty("--tint", (ui.tint / 100).toFixed(2));
+  $("uTint").value = ui.tint; $("uTintV").textContent = ui.tint == 0 ? "só o vidro" : ui.tint + "%";
+  [...$("uTheme").children].forEach(b => b.classList.toggle("sel", b.dataset.t === (ui.theme || "auto")));
+}
+mq.addEventListener("change", () => CONF && applyUI(CONF.ui));
+let uiTimer = null;
+function setUI(patch, now){
+  Object.assign(CONF.ui, patch); applyUI(CONF.ui);
+  clearTimeout(uiTimer); uiTimer = setTimeout(() => api("/api/ui", patch), now ? 0 : 300);
+}
+$("uTint").oninput = e => setUI({tint:+e.target.value});
+const bootBackdrop = { v: null };
+$("uBack").onclick = e => { const b = e.target.dataset.b; if (!b) return;
+  if (bootBackdrop.v === null) bootBackdrop.v = CONF.ui.backdrop;
+  setUI({backdrop:b}, true); $("backNote").hidden = b === bootBackdrop.v; };
+$("uTheme").onclick = e => { const t = e.target.dataset.t; if (t) setUI({theme:t}, true); };
+
+/* arrastar a janela pela barra de cima (movimento nativo do Windows) */
+$("bar").addEventListener("mousedown", e => {
+  if (e.button !== 0 || e.target.closest("button") || !native()) return;
+  e.preventDefault(); pywebview.api.drag();
+});
+
+/* ---------- diagnóstico */
+async function runDiag(){
+  $("diagTxt").value = "Rodando… pode levar alguns segundos.";
+  try{ $("diagTxt").value = (await api("/api/diag")).text; } catch(e){ $("diagTxt").value = "Erro: " + e.message; }
+}
+/* ---------- conta Positivo */
+function paintPos(){
+  $("oPosSub").textContent = CONF.positivo_on ? "Conectada · " + CONF.positivo_email : "Lâmpadas e tomadas do app Positivo Casa Inteligente";
+  $("posOff").hidden = !CONF.positivo_on;
+  $("pEmail").value = CONF.positivo_email || "";
+  $("pPass").value = ""; $("pPass").placeholder = CONF.positivo_on ? "•••••••• (mantém a atual se ficar vazio)" : "";
+}
+$("oPos").onclick = () => { closeShade("settings"); paintPos(); $("posMsg").hidden = true; openShade("posSheet"); };
+$("eyePos").onclick = () => { const f = $("pPass"); f.type = f.type === "password" ? "text" : "password"; };
+$("posOn").onclick = async () => {
+  const b = $("posOn"); b.disabled = true; b.innerHTML = '<span class="spin"></span>Conectando…';
+  try{
+    const r = await api("/api/positivo/connect", {email:$("pEmail").value, password:$("pPass").value});
+    if (!r.ok){ msg($("posMsg"), "bad", r.error); }
+    else{
+      CONF = await api("/api/config"); paintPos();
+      msg($("posMsg"), "good", r.count ? `Conectado! ${r.count} aparelho(s): ${r.names.join(", ")}. Já estão no painel.` : "Conectado, mas a conta não tem aparelhos.");
+      load();
+    }
+  } catch(e){ msg($("posMsg"), "bad", "Erro: " + e.message); }
+  b.disabled = false; b.textContent = "Conectar";
+};
+$("posOff").onclick = async () => { await api("/api/positivo/disconnect", {}); CONF = await api("/api/config"); paintPos(); $("posMsg").hidden = true; load(); };
+
+$("oDiag").onclick = () => { closeShade("settings"); openShade("diag"); runDiag(); };
+$("diagRun").onclick = runDiag;
+$("acTest").onclick = async () => {
+  const b = $("acTest"); b.disabled = true; b.innerHTML = '<span class="spin"></span>Testando…';
+  $("diagTxt").value = "Testando o ar-condicionado… (uns 10 segundos)";
+  try{ $("diagTxt").value = (await api("/api/ac/test", {})).text; } catch(e){ $("diagTxt").value = "Erro: " + e.message; }
+  b.disabled = false; b.textContent = "Testar o ar";
+};
+function openACTest(){ openShade("diag"); $("acTest").click(); }
+$("diagCopy").onclick = () => { const t = $("diagTxt"); t.select(); document.execCommand("copy"); $("diagCopy").textContent = "Copiado!"; setTimeout(() => $("diagCopy").textContent = "Copiar", 1500); };
+
+/* ================= janela ================= */
+function nativeReady(){
+  document.documentElement.classList.remove("web");
+  document.querySelectorAll(".nat").forEach(e => e.hidden = false);
+  pywebview.api.theme().then(t => {
+    $("glassInfo").textContent = t.mode === "acrylic-dwm"
+      ? "Vidro: Desktop Acrylic nativo do Windows 11 (desfocado pelo próprio sistema)."
+      : t.mode === "acrylic-legacy" ? "Vidro: acrylic do Windows 10 / Windows 11 21H2." : "";
+  });
+  pywebview.api.autostart().then(v => $("oAuto").querySelector(".tg").classList.toggle("on", v));
+}
+window.addEventListener("pywebviewready", nativeReady);
+$("btnMin").onclick = () => pywebview.api.minimize();
+$("btnClose").onclick = () => pywebview.api.hide();
+$("oQuit").onclick = () => pywebview.api.quit();
+$("oAuto").onclick = async () => { const tg = $("oAuto").querySelector(".tg");
+  const v = await pywebview.api.autostart(!tg.classList.contains("on")); tg.classList.toggle("on", v); };
+
+function openShade(id){ $(id).classList.add("open"); busy++; }
+function closeShade(id){ $(id).classList.remove("open"); busy = Math.max(0, busy-1); }
+document.querySelectorAll(".shade").forEach(sh => {
+  sh.onclick = e => { if (e.target === sh || e.target.hasAttribute("data-close")) { if (sh.id === "shade") closeLamp(); else closeShade(sh.id); } };
+});
+$("btnSettings").onclick = () => openShade("settings");
+document.addEventListener("keydown", e => {
+  if (e.key === "Escape") document.querySelectorAll(".shade.open").forEach(s => s.id === "shade" ? closeLamp() : closeShade(s.id));
+  if ($("panel").hidden || document.activeElement.tagName === "INPUT") return;
+  if (e.key === "ArrowUp") $("plus").click();
+  if (e.key === "ArrowDown") $("minus").click();
+});
+
+/* ================= assistente ================= */
+let step = 0, DISC = null, chosenAC = null;
+function go(n){
+  step = n;
+  document.querySelectorAll("[data-step]").forEach(s => s.hidden = +s.dataset.step !== n);
+  [...$("dots").children].forEach((d,i) => d.classList.toggle("on", i === n));
+  $("scroll").scrollTop = 0;
+  if (n === 4) loadDiscover();
+}
+document.querySelectorAll("[data-go]").forEach(b => b.onclick = () => go(+b.dataset.go));
+document.querySelectorAll("[data-url]").forEach(b => b.onclick = () => openUrl(b.dataset.url));
+$("eyeSecret").onclick = () => { const f = $("fSecret"); f.type = f.type === "password" ? "text" : "password"; };
+
+function showSetup(n){
+  $("panel").hidden = true; $("setup").hidden = false; $("btnSettings").hidden = !CONF.configured;
+  stopPoll(); go(n);
+}
+function msg(el, cls, html){ el.hidden = false; el.className = "msg " + cls; el.innerHTML = html; }
+
+async function runTest(btn, msgEl, keep){
+  const label = btn.textContent;
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span>' + ($("fRegion").value === "auto" ? "Procurando seu data center…" : "Conectando…");
+  try{
+    const r = await api("/api/setup/test", {access_id:$("fId").value, access_secret:$("fSecret").value,
+                                            region: keep ? CONF.region : $("fRegion").value, keep_secret: true});
+    if (!r.ok){ msg(msgEl, "bad", r.error); return; }
+    CONF.region = r.region; CONF.access_id = $("fId").value.trim(); CONF.has_secret = true;
+    if (r.linked){ msg(msgEl, "good", `Conectado! ${r.count} aparelho(s) encontrados.`); setTimeout(() => go(4), 500); }
+    else if (keep) msg(msgEl, "bad", "Ainda não apareceu nenhum aparelho. Confira se escaneou o QR com a mesma conta do Smart Life e tente de novo em alguns segundos.");
+    else go(3);
+  } catch(e){ msg(msgEl, "bad", "Erro: " + e.message); }
+  finally{ btn.disabled = false; btn.textContent = label; }
+}
+$("btnTest").onclick = () => runTest($("btnTest"), $("testMsg"), false);
+$("btnRecheck").onclick = () => runTest($("btnRecheck"), $("linkMsg"), true);
+$("goDemo").onclick = async () => { await api("/api/setup/demo", {}); CONF.demo = true; go(4); };
+
+const KIND_IC = {
+  light:'<path d="M9 18h6M10 21h4"/><path d="M12 3a6 6 0 0 0-4 10.5c.7.7 1 1.5 1 2.5h6c0-1 .3-1.8 1-2.5A6 6 0 0 0 12 3z"/>',
+  plug:'<path d="M9 2v5M15 2v5M6 7h12v4a6 6 0 0 1-12 0zM12 17v5"/>',
+  hub:'<circle cx="12" cy="12" r="3"/><path d="M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14M8 8a5 5 0 0 0 0 8M16 8a5 5 0 0 1 0 8"/>',
+  ac:'<rect x="3" y="5" width="18" height="8" rx="2"/><path d="M7 17l-1 3M12 17v3M17 17l1 3"/>',
+  other:'<circle cx="12" cy="12" r="8"/><path d="M12 8v4M12 16h.01"/>'
+};
+KIND_IC.switch = KIND_IC.multi = KIND_IC.light;
+const EYE_ON = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3l18 18M10.6 5.1A10 10 0 0 1 12 5c6.5 0 10 7 10 7a17 17 0 0 1-3.2 4M6.6 6.6A17 17 0 0 0 2 12s3.5 7 10 7a9.6 9.6 0 0 0 5.4-1.6"/></svg>';
+
+async function loadDiscover(){
+  $("devList").innerHTML = '<div class="muted">Buscando aparelhos…</div>'; $("acList").innerHTML = "";
+  try{ DISC = await api("/api/setup/discover"); }
+  catch(e){ $("devList").innerHTML = `<div class="msg bad">${e.message}</div>`; return; }
+  const ctrl = DISC.devices.filter(d => !["hub","ac","other"].includes(d.kind));
+  $("foundTxt").textContent = `Encontrei ${ctrl.length} aparelho(s) controláveis${DISC.acs.length ? " e o ar-condicionado" : ""}. Eles já entram no painel automaticamente.`;
+  // ar
+  const cur = DISC.current || {};
+  chosenAC = DISC.acs.find(a => (a.type !== "wifi" && a.remote_id === cur.remote_id) || (a.type === "wifi" && a.device_id === cur.device_id)) || DISC.acs[0] || null;
+  $("fRoom").value = cur.room_name || "Quarto";
+  const modes = (cur.modes && cur.modes.length) ? cur.modes : ["cool","heat","auto","fan","dry"];
+  $("fCool").querySelector(".tg").classList.toggle("on", !modes.includes("heat"));
+  $("fRooms").value = (DISC.rooms || []).filter(r => r !== "Outros").join(", ");
+  const al = $("acList"); al.innerHTML = "";
+  if (!DISC.acs.length){
+    al.innerHTML = '<div class="muted chip" style="padding:10px 12px">Nenhum ar encontrado. Cadastre o ar no Controlador IR pelo app Smart Life e volte aqui.</div>';
+    if (DISC.ir_error) al.insertAdjacentHTML("beforeend", '<div class="msg bad"></div>'), al.lastChild.textContent = "O Controlador IR recusou a consulta: " + DISC.ir_error;
+  }
+  DISC.acs.forEach(a => {
+    const el = document.createElement("div"); el.className = "acopt chip" + (a === chosenAC ? " sel" : "");
+    el.innerHTML = `<i></i><div><span></span><small>${a.type === "wifi" ? "Ar Wi-Fi" : "Pelo controle IR" + (a.hub ? " · " + a.hub : "")}</small></div>`;
+    el.querySelector("span").textContent = a.name;
+    el.onclick = () => { chosenAC = a; [...al.children].forEach(c => c.classList.toggle("sel", c === el)); };
+    al.appendChild(el);
+  });
+  // sensores
+  $("sensorBox").hidden = !DISC.sensors.length;
+  $("fSensor").innerHTML = '<option value="">Nenhum</option>' + DISC.sensors.map(s => `<option value="${s.id}">${s.name}</option>`).join("");
+  // aparelhos
+  const dl = $("devList"); dl.innerHTML = "";
+  for (const d of DISC.devices){
+    if (["hub","ac"].includes(d.kind)) continue;
+    const box = document.createElement("div"); box.className = "chip"; box.style.borderRadius = "14px";
+    const row = document.createElement("div"); row.className = "drow" + (d.hidden ? " hid" : "");
+    row.innerHTML = `<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">${KIND_IC[d.kind]||KIND_IC.other}</svg>
+      <input class="inp" maxlength="40"><button class="eye" title="Mostrar/esconder no painel">${d.hidden ? EYE_OFF : EYE_ON}</button>`;
+    const inp = row.querySelector("input"); inp.value = d.name; inp.placeholder = d.original_name;
+    if (!["hub","other"].includes(d.kind)){
+      const sel = document.createElement("select"); sel.className = "room"; sel.title = "Cômodo";
+      sel._dev = d; fillRoomSelect(sel);
+      sel.onchange = () => { d.room = sel.value || "Outros"; d.room_set = true; };
+      row.insertBefore(sel, row.querySelector(".eye"));
+    }
+    if (d.source) inp.title = "Aparelho da conta " + d.source;
+    inp.oninput = () => d.name = inp.value;
+    row.querySelector(".eye").onclick = () => { d.hidden = !d.hidden; row.classList.toggle("hid", d.hidden); row.querySelector(".eye").innerHTML = d.hidden ? EYE_OFF : EYE_ON; };
+    if (d.kind === "other"){ row.querySelector(".eye").remove(); inp.disabled = true; row.classList.add("hid"); row.title = "Este aparelho não tem liga/desliga"; }
+    box.appendChild(row);
+    if (d.kind === "multi"){
+      const sub = document.createElement("div"); sub.className = "subch";
+      d.channels.forEach((c, i) => { const ci = document.createElement("input"); ci.className = "inp"; ci.value = c; ci.placeholder = `Tecla ${i+1}`;
+        ci.oninput = () => d.channels[i] = ci.value; sub.appendChild(ci); });
+      box.appendChild(sub);
+    }
+    dl.appendChild(box);
+  }
+}
+
+function roomList(){ return $("fRooms").value.split(",").map(x => x.trim()).filter(Boolean); }
+function fillRoomSelect(sel){
+  const d = sel._dev;
+  const opts = [...new Set([...roomList(), d.room])].filter(r => r && r !== "Outros");
+  sel.innerHTML = ""; opts.forEach(r => sel.add(new Option(r, r))); sel.add(new Option("Outros", ""));
+  sel.value = d.room === "Outros" ? "" : d.room;
+}
+$("fRooms").addEventListener("change", () => document.querySelectorAll("#devList select.room").forEach(fillRoomSelect));
+$("fCool").onclick = () => $("fCool").querySelector(".tg").classList.toggle("on");
+
+$("btnSave").onclick = async () => {
+  if (!DISC) return;
+  const names = {}, channel_names = {}, hide = [], device_room = {};
+  for (const d of DISC.devices){
+    if (d.room_set || d.room_manual) device_room[d.id] = d.room === "Outros" ? "" : d.room;
+    if (d.name && d.name.trim() && d.name.trim() !== d.original_name) names[d.id] = d.name.trim();
+    if (d.hidden) hide.push(d.id);
+    if (d.kind === "multi") channel_names[d.id] = d.channels.map(c => (c||"").trim());
+  }
+  const ac = {room_name: $("fRoom").value.trim() || "Quarto",
+              modes: $("fCool").querySelector(".tg").classList.contains("on") ? ["cool","auto","dry","fan"] : ["cool","heat","auto","fan","dry"]};
+  if (chosenAC) Object.assign(ac,
+      chosenAC.type === "ir"    ? {type:"ir", infrared_id:chosenAC.infrared_id, remote_id:chosenAC.remote_id, device_id:""} :
+      chosenAC.type === "irdev" ? {type:"irdev", infrared_id:"", remote_id:chosenAC.remote_id, device_id:""} :
+                                  {type:"wifi", device_id:chosenAC.device_id, infrared_id:"", remote_id:""});
+  const b = $("btnSave"); b.disabled = true; b.innerHTML = '<span class="spin"></span>Salvando…';
+  try{
+    const r = await api("/api/setup/save", {names, channel_names, hide, ac, device_room, rooms: roomList(), room_sensor_id: $("fSensor").value});
+    if (!r.ok){ msg($("saveMsg"), "bad", r.error); return; }
+    CONF = await api("/api/config"); showPanel();
+  } catch(e){ msg($("saveMsg"), "bad", "Erro: " + e.message); }
+  finally{ b.disabled = false; b.textContent = "Concluir"; }
+};
+
+$("oDevices").onclick = () => { closeShade("settings"); showSetup(4); };
+$("oAccount").onclick = () => { closeShade("settings"); $("fId").value = CONF.access_id || ""; $("fSecret").value = "";
+  $("fSecret").placeholder = CONF.has_secret ? "•••••••• (mantém a atual se ficar vazio)" : ""; showSetup(2); };
+
+/* ================= painel ================= */
+const MODES = {cool:"Resfriar",heat:"Aquecer",auto:"Automático",fan:"Ventilar",dry:"Desumidificar"};
+const MODE_ORDER = ["cool","heat","auto","fan","dry"];
+const FANS = {auto:"Auto",low:"Baixa",mid:"Média",high:"Alta"};
+const FAN_ORDER = ["auto","low","mid","high"];
+const ICONS = {
+  cool:'<path d="M12 2v20M4.9 7l14.2 10M4.9 17L19.1 7"/><path d="M9 4l3 2 3-2M9 20l3-2 3 2"/>',
+  heat:'<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
+  auto:'<path d="M5 19l7-15 7 15M8 13h8"/>',
+  fan:'<path d="M3 8h11a3 3 0 1 0-3-3M3 12h16a3 3 0 1 1-3 3M3 16h7"/>',
+  dry:'<path d="M12 3s6 6.5 6 11a6 6 0 0 1-12 0c0-4.5 6-11 6-11z"/>'
+};
+(function(){ let p = "";
+  for (let i=0;i<34;i++){ const x = 28 + i*8.5, d = (i-17)*1.8, len = 70 + Math.random()*26;
+    p += `<path d="M${x} 0 C ${x+d} ${len*.4}, ${x+d*2} ${len*.75}, ${x+d*2.6} ${len}" style="animation-delay:-${(Math.random()*1.4).toFixed(2)}s"/>`; }
+  $("air").innerHTML = p; })();
+
+function showPanel(){
+  $("setup").hidden = true; $("panel").hidden = false; $("btnSettings").hidden = false; $("scroll").scrollTop = 0;
+  $("panel").classList.remove("rise"); void $("panel").offsetWidth; $("panel").classList.add("rise");
+  $("oAccountSub").textContent = CONF.demo ? "Modo demonstração · conectar conta real" : "Trocar chaves de acesso";
+  load(); stopPoll(); poll = setInterval(load, 15000);
+}
+function stopPoll(){ if (poll) clearInterval(poll); poll = null; }
+
+const tmin = () => (S && S.ac.temp_min) || 17, tmax = () => (S && S.ac.temp_max) || 30;
+const modeList = () => MODE_ORDER.filter(m => !S.ac.modes || S.ac.modes.includes(m));
+function paintRange(v){ const pct = Math.max((v-tmin())/(tmax()-tmin())*100, 8);
+  $("range").style.background = `linear-gradient(90deg,rgba(61,124,240,.95) 0%,rgba(92,200,255,.95) ${pct}%,rgba(255,255,255,.07) ${pct}%)`; }
+
+function render(){
+  if (!S) return;
+  const a = S.ac;
+  $("roomName").textContent = S.room.name;
+  $("roomTemp").textContent = S.room.temp != null ? `${S.room.temp}°C` : "";
+  $("demo").hidden = !S.demo;
+  $("card").classList.toggle("disabled", !a.power || !a.available);
+  $("card").classList.toggle("lit", a.power && a.available);
+  $("pwr").classList.toggle("on", a.power);
+  $("unit").classList.toggle("off", !a.power);
+  const air = $("air"); air.classList.toggle("off", !a.power); air.classList.toggle("turbo", a.turbo); air.classList.toggle("heat", a.mode === "heat");
+  $("tval").textContent = a.temp; $("disp").textContent = a.temp;
+  $("range").min = tmin(); $("range").max = tmax();
+  $("rMin").textContent = tmin() + "°"; $("rMax").textContent = tmax() + "°";
+  $("range").value = a.temp; paintRange(a.temp);
+  $("modeVal").textContent = MODES[a.mode] || a.mode; $("modeIc").innerHTML = ICONS[a.mode] || ICONS.cool;
+  $("fanVal").textContent = FANS[a.fan] || a.fan;
+  $("turboTg").classList.toggle("on", a.turbo); $("turboVal").textContent = a.turbo ? "Ligado" : "Desligado";
+  $("tTurbo").classList.toggle("act", a.turbo);
+  if (!a.available) $("err").textContent = "Nenhum ar escolhido — abra Ajustes → Gerenciar aparelhos.";
+  else if (a.error){ $("err").innerHTML = ""; $("err").append("Ar: " + a.error + " ");
+    const l = document.createElement("button"); l.className = "link"; l.textContent = "Testar o ar"; l.onclick = openACTest; $("err").append(l); }
+  renderDevices();
+}
+
+const IC = {
+  light:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">'+KIND_IC.light+'</svg>',
+  plug:'<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round">'+KIND_IC.plug+'</svg>',
+  adj:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>'
+};
+IC.switch = IC.light;
+const lightColor = d => d.light.mode === "colour" ? `hsl(${d.light.h} ${Math.max(d.light.s,35)}% 62%)` : d.light.temp < 50 ? "#ffb84d" : "#8fc2ff";
+
+function devCard(d){
+  const el = document.createElement("div");
+  const lit = d.kind === "light" && d.on && d.online;
+  el.className = "dev glass" + (lit ? " lit" : d.on ? " on" : "") + (d.online ? "" : " off-line");
+  if (lit) el.style.setProperty("--lc", lightColor(d));
+  const sub = !d.online ? "Offline" : !d.on ? "Desligado" : (d.kind === "light" && d.light.has_bright ? `Ligado · ${d.light.brightness}%` : "Ligado");
+  el.innerHTML = `<div class="row">${IC[d.kind] || IC.light}<div class="tg ${d.on?"on":""}"></div></div><div><div class="n"></div><div class="s">${sub}</div></div>`;
+  el.querySelector(".n").textContent = d.name;
+  if (d.online){
+    el.onclick = () => setDev(d, {on: !d.on});
+    if (d.kind === "light" && (d.light.has_bright || d.light.has_color || d.light.has_temp)){
+      const b = document.createElement("button"); b.className = "adj"; b.title = "Ajustar"; b.innerHTML = IC.adj;
+      b.onclick = e => { e.stopPropagation(); openLamp(d); }; el.appendChild(b);
+    }
+  }
+  return el;
+}
+function multiCard(d){
+  const el = document.createElement("div");
+  el.className = "dev glass wide" + (d.online ? "" : " off-line");
+  el.innerHTML = `<div><div class="n"></div><div class="s">${d.online ? d.channels.filter(c=>c.on).length + " de " + d.channels.length + " ligadas" : "Offline"}</div></div><div class="chans"></div>`;
+  el.querySelector(".n").textContent = d.name;
+  for (const ch of d.channels){
+    const b = document.createElement("div"); b.className = "ch chip" + (ch.on ? " on" : "");
+    b.innerHTML = "<span></span><i></i>"; b.querySelector("span").textContent = ch.name;
+    if (d.online) b.onclick = () => { ch.on = !ch.on; d.on = d.channels.some(c=>c.on); renderDevices(); setDev(d, {channel:ch.code, on:ch.on}, true); };
+    el.querySelector(".chans").appendChild(b);
+  }
+  return el;
+}
+let ROOM = "Todos";
+try{ ROOM = localStorage.getItem("cc_room") || "Todos"; } catch(e){}
+const isLight = d => d.kind !== "plug";
+function roomStats(list){ const on = list.filter(d => d.on && d.online).length; return {on, total:list.length}; }
+function renderDevices(){
+  const rooms = (S.rooms || []).filter(r => S.devices.some(d => d.room === r));
+  if (ROOM !== "Todos" && !rooms.includes(ROOM)) ROOM = "Todos";
+  // filtro
+  const bar = $("roomBar"); bar.innerHTML = "";
+  const chip = (name, count) => { const c = document.createElement("button"); c.className = "rchip chip" + (ROOM === name ? " sel" : "");
+    c.innerHTML = "<span></span>" + (count ? `<b>${count}</b>` : ""); c.querySelector("span").textContent = name;
+    c.onclick = () => { ROOM = name; try{ localStorage.setItem("cc_room", name); }catch(e){} renderDevices(); }; bar.appendChild(c); };
+  chip("Todos", S.devices.filter(d => d.on && d.online && isLight(d)).length);
+  rooms.forEach(r => chip(r, S.devices.filter(d => d.room === r && d.on && d.online && isLight(d)).length));
+  // seções
+  const box = $("rooms"); box.innerHTML = "";
+  const show = ROOM === "Todos" ? rooms : [ROOM];
+  for (const r of show){
+    const list = S.devices.filter(d => d.room === r);
+    const lights = list.filter(isLight), st = roomStats(lights);
+    const sec = document.createElement("section"); sec.className = "room-sec";
+    sec.innerHTML = `<div class="room-hd"><h3><span></span><small>${lights.length ? (st.on ? st.on + " de " + st.total + " luzes acesas" : "luzes apagadas") : list.length + " tomada(s)"}</small></h3></div><div class="devs"></div>`;
+    sec.querySelector("h3 span").textContent = r;
+    if (st.on){
+      const off = document.createElement("button"); off.className = "pill chip"; off.textContent = "Apagar";
+      off.onclick = () => roomOff(r); sec.querySelector(".room-hd").appendChild(off);
+    }
+    const grid = sec.querySelector(".devs");
+    [...lights, ...list.filter(d => !isLight(d))].forEach(d => grid.appendChild(d.kind === "multi" ? multiCard(d) : devCard(d)));
+    box.appendChild(sec);
+  }
+  if (!rooms.length) box.innerHTML = '<div class="empty">Nenhum aparelho no painel.</div>';
+  // apagar tudo
+  const all = document.createElement("button"); all.className = "rchip chip off-all"; all.textContent = "Apagar tudo";
+  all.onclick = () => roomOff(null); bar.appendChild(all);
+}
+async function roomOff(room){
+  S.devices.forEach(d => { if (isLight(d) && d.online && (!room || d.room === room)){ d.on = false; (d.channels||[]).forEach(c => c.on = false); } });
+  renderDevices(); busy++; setStatus("Apagando…");
+  try{ S = await api("/api/lights-off", room ? {room} : {}); setStatus("Atualizado"); } catch(e){ $("err").textContent = "Erro: " + e.message; }
+  busy = Math.max(0, busy-1); render();
+}
+const setStatus = t => $("status").textContent = t;
+
+async function load(){
+  if (busy) return;
+  $("refresh").classList.add("spin");
+  try{
+    const r = await api("/api/state");
+    if (r.needs_setup){ showSetup(CONF.access_id ? 2 : 0); if (r.error) msg($("testMsg"), "bad", r.error); return; }
+    S = r; $("err").textContent = ""; setStatus(r.ac && r.ac.error ? "Com erro" : "Atualizado"); render();
+  } catch(e){ $("err").textContent = "Erro: " + e.message; setStatus("Sem conexão"); }
+  finally{ $("refresh").classList.remove("spin"); }
+}
+/* manda só o que mudou, juntando cliques rápidos num comando só (= um bip no ar) */
+let acPending = {}, acSending = false;
+async function sendAC(patch, delay=0){
+  Object.assign(S.ac, patch); Object.assign(acPending, patch); render(); setStatus("Enviando…");
+  if (!acSending){ acSending = true; busy++; }
+  clearTimeout(sendTimer);
+  sendTimer = setTimeout(async () => {
+    const p = acPending; acPending = {};
+    try{ S = await api("/api/ac", p); setStatus("Atualizado"); $("err").textContent = ""; }
+    catch(e){ $("err").textContent = "Erro: " + e.message; setStatus("Com erro"); }
+    if (Object.keys(acPending).length === 0){ acSending = false; busy = Math.max(0, busy-1); render(); }
+  }, delay || 0);
+}
+async function setDev(d, patch, already){
+  if (!already && "on" in patch && !("channel" in patch)){ d.on = patch.on; renderDevices(); }
+  busy++;
+  try{ S = await api(`/api/device/${d.id}`, patch); $("err").textContent = ""; }
+  catch(e){ $("err").textContent = "Erro: " + e.message; }
+  busy = Math.max(0, busy-1); render();
+}
+$("pwr").onclick = () => sendAC({power: !S.ac.power});
+$("range").oninput = e => { const v = +e.target.value; S.ac.temp = v; $("tval").textContent = v; $("disp").textContent = v; paintRange(v); };
+$("range").onchange = e => sendAC({temp:+e.target.value}, 400);
+$("minus").onclick = () => sendAC({temp: Math.max(tmin(), S.ac.temp-1)}, 700);
+$("plus").onclick = () => sendAC({temp: Math.min(tmax(), S.ac.temp+1)}, 700);
+$("tMode").onclick = () => { const L = modeList(); sendAC({mode: L[(L.indexOf(S.ac.mode)+1) % L.length]}, 700); };
+$("tFan").onclick = () => sendAC({fan: FAN_ORDER[(FAN_ORDER.indexOf(S.ac.fan)+1)%4]}, 700);
+$("tTurbo").onclick = () => sendAC({turbo: !S.ac.turbo});
+$("refresh").onclick = load;
+
+
+/* ---------- painel da lâmpada */
+let cur = null, lampTimer = null;
+const SWATCH = [0, 25, 45, 120, 180, 210, 270, 310];
+$("sSw").innerHTML = SWATCH.map(h => `<button data-h="${h}" style="background:hsl(${h} 90% 55%)"></button>`).join("");
+function paintLamp(){
+  const L = cur.light;
+  $("sName").textContent = cur.name;
+  $("sSeg").style.display = L.has_color ? "" : "none";
+  [...$("sSeg").children].forEach(b => b.classList.toggle("sel", b.dataset.m === L.mode));
+  $("sBright").value = L.brightness; $("sBrightV").textContent = L.brightness + "%";
+  $("sWhite").style.display = L.mode !== "colour" && L.has_temp ? "" : "none";
+  $("sColour").style.display = L.mode === "colour" && L.has_color ? "" : "none";
+  $("sTemp").value = L.temp; $("sHue").value = L.h;
+  [...$("sSw").children].forEach(b => b.classList.toggle("sel", +b.dataset.h === L.h));
+}
+function openLamp(d){ cur = d; paintLamp(); openShade("shade"); }
+function closeLamp(){ closeShade("shade"); cur = null; load(); }
+function lampSend(patch){
+  Object.assign(cur.light, patch.light || {}); cur.on = true; paintLamp(); renderDevices();
+  clearTimeout(lampTimer);
+  lampTimer = setTimeout(async () => {
+    try{ S = await api(`/api/device/${cur.id}`, patch.send); cur = S.devices.find(x => x.id === cur.id) || cur; }
+    catch(e){ $("err").textContent = "Erro: " + e.message; }
+  }, 350);
+}
+$("sBright").oninput = e => { const v = +e.target.value; lampSend({light:{brightness:v}, send:{brightness:v}}); };
+$("sTemp").oninput = e => { const v = +e.target.value; lampSend({light:{temp:v, mode:"white"}, send:{temp:v}}); };
+$("sHue").oninput = e => { const h = +e.target.value; lampSend({light:{h, s:100, mode:"colour"}, send:{color:{h, s:100}}}); };
+$("sSw").onclick = e => { const h = e.target.dataset.h; if (h === undefined) return; lampSend({light:{h:+h, s:100, mode:"colour"}, send:{color:{h:+h, s:100}}}); };
+$("sSeg").onclick = e => { const m = e.target.dataset.m; if (!m) return;
+  if (m === "colour") lampSend({light:{mode:"colour"}, send:{color:{h:cur.light.h, s:cur.light.s || 100}}});
+  else lampSend({light:{mode:"white"}, send:{temp:cur.light.temp}}); };
+
+/* ================= início ================= */
+setTimeout(() => { if (!native()) document.documentElement.classList.add("web"); }, 700);
+(async function boot(){
+  try{ CONF = await api("/api/config"); }
+  catch(e){ document.body.insertAdjacentHTML("beforeend", `<p class="err" style="position:fixed;top:60px;left:0;right:0">Não consegui falar com o programa: ${e.message}</p>`); return; }
+  applyUI(CONF.ui);
+  $("ver").textContent = "v" + CONF.version;
+  if ((CONF.version || 0) < UI_VERSION){
+    const bar = document.createElement("div"); bar.className = "msg bad";
+    bar.style.cssText = "position:fixed;left:12px;right:12px;bottom:12px;z-index:40";
+    bar.textContent = "Atualização pela metade: " + OLD_ENGINE;
+    document.body.appendChild(bar);
+  }
+  const sel = $("fRegion");
+  CONF.regions.forEach(([v, t]) => sel.insertAdjacentHTML("beforeend", `<option value="${v}">${t}</option>`));
+  if (CONF.configured || CONF.demo) showPanel(); else showSetup(0);
+})();
+</script>
+</body>
+</html>
