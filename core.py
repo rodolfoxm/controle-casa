@@ -7,9 +7,22 @@ import collections, copy, json, os, re, sys, threading, time
 
 import protecao
 from protecao import ProtectionError
+
+# O console do Windows usa uma codificação antiga (cp1252) que não aceita símbolos como "→".
+# Sem isto, um simples print() de uma mensagem com símbolo derruba o pedido inteiro.
+for _s in (sys.stdout, sys.stderr):
+    try:
+        if _s is not None and hasattr(_s, "reconfigure"):
+            _s.reconfigure(errors="replace")
+    except Exception:
+        pass
+if sys.stdout is None or sys.stderr is None:      # pythonw: sem console
+    _null = open(os.devnull, "w", encoding="utf-8")
+    sys.stdout = sys.stdout or _null
+    sys.stderr = sys.stderr or _null
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = 13
+VERSION = 14
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(sys.executable if FROZEN else os.path.abspath(__file__))
 RES = getattr(sys, "_MEIPASS", APP_DIR)
@@ -335,7 +348,7 @@ class Demo:
             out.append(x)
         return out
 
-    def state(self):
+    def state(self, cache_only=False, **_):
         return dict(demo=True, room=dict(name=CFG["ac"].get("room_name", "Quarto"), temp=26),
                     ac=dict(self.ac, available=True, **ac_profile()), devices=(v := visible(self._named())),
                     rooms=room_order(v))
@@ -421,10 +434,18 @@ class Tuya:
             self._detect()
 
     def req(self, url, action="GET", post=None, query=None):
+        if COTA["esgotada_ate"] > time.time() and action == "GET":
+            # cota acabou: leituras automáticas esperam; comandos (POST) ainda tentam
+            return {"success": False, "code": 28841004, "msg": COTA["msg"] or "cota esgotada"}
+        contar_chamada()
         with self.lock:
             r = self.c.cloudrequest(url, action=action, post=post, query=query)
         if not isinstance(r, dict):
             r = {"success": False, "msg": str(r)}
+        if str(r.get("code")) in QUOTA_CODES:
+            COTA.update(esgotada_ate=time.time() + 3600, msg=_err_text(r))   # tenta de novo em 1 h
+        elif r.get("success") is not False:
+            COTA["esgotada_ate"] = 0
         if r.get("success") is False or r.get("Error"):
             line = f"{action} {url} -> {_err_text(r)}"
             print("[Tuya]", line)
@@ -435,8 +456,10 @@ class Tuya:
     def ok(r):
         return isinstance(r, dict) and r.get("success") is True and r.get("result") is not False
 
-    def devices(self, force=False, raise_errors=False):
-        if not force and time.time() - self._cache_t < 4:
+    def devices(self, force=False, raise_errors=False, cache_only=False):
+        if cache_only or (not force and time.time() - self._cache_t < ttl_atual()):
+            return self._cache
+        if not force and COTA["esgotada_ate"] > time.time():
             return self._cache
         out, last = [], ""
         for _ in range(20):
@@ -561,6 +584,7 @@ class Tuya:
         return dict(power=False, mode="cool", temp=24, fan="auto", turbo=False, available=False)
 
     def set_ac(self, data):
+        marcar_atividade()
         new = dict(self.ac_state())
         new.update({k: data[k] for k in ("power", "mode", "temp", "fan", "turbo") if k in data})
         new["temp"] = clamp(int(new["temp"]), CFG["ac"].get("temp_min", 17), CFG["ac"].get("temp_max", 30))
@@ -587,7 +611,6 @@ class Tuya:
                 else:
                     cmds.append({"code": w["fan"], "value": w["fan_map"]["high" if self.turbo else new["fan"]]})
             self._send(self.wifi_id, cmds)
-        self._cache_t = 0
         return self.state(ac_override=dict(new, **ac_profile()))
 
     def _find_hub(self):
@@ -730,10 +753,12 @@ class Tuya:
                 return round(v / 10) if v > 60 else v
         return None
 
-    def state(self, ac_override=None):
+    def state(self, ac_override=None, cache_only=False):
         skip = {self.ir_id, self.remote_id, self.wifi_id}
-        self.refresh_rooms()
-        devs = [p for p in (parse_device(d) for d in self.devices() + positivo_devices() if d["id"] not in skip) if p]
+        if not cache_only:
+            self.refresh_rooms()
+        devs = [p for p in (parse_device(d) for d in self.devices(cache_only=cache_only)
+                            + positivo_devices(cache_only=cache_only) if d["id"] not in skip) if p]
         ac = ac_override or self.ac_state()
         ac.setdefault("available", True)
         v = visible(devs)
@@ -741,14 +766,14 @@ class Tuya:
                     ac=ac, devices=v, rooms=room_order(v))
 
     def refresh_rooms(self, wait=False):
-        """Lê os cômodos do Smart Life (a cada 10 min, em segundo plano). Sem permissão, só ignora."""
-        if SL_ROOMS["busy"] or time.time() - SL_ROOMS["t"] < 600:
+        """Lê os cômodos do Smart Life (1 vez por dia, em segundo plano). Sem permissão, só ignora."""
+        if SL_ROOMS["busy"] or (not wait and time.time() - SL_ROOMS["t"] < 86400):
             return
 
         def work():
             SL_ROOMS["busy"] = True
             try:
-                homes = {d.get("owner_id") for d in self.devices() if d.get("owner_id")}
+                homes = {d.get("owner_id") for d in self.devices(cache_only=not wait) if d.get("owner_id")}
                 mp = {}
                 for hid in homes:
                     r = self.req(f"/v1.0/homes/{hid}/rooms")
@@ -789,11 +814,22 @@ class Tuya:
             r = routes[k]()
             if self.ok(r):
                 self.dev_mode[dev_id] = k
+                self._apply_local(dev_id, cmds)
                 return
             first_err = first_err or _err_text(r)
         raise RuntimeError(first_err or "O aparelho não respondeu.")
 
+    def _apply_local(self, dev_id, cmds):
+        """Depois de um comando aceito, atualiza o estado guardado em vez de reler a nuvem."""
+        vals = {c["code"]: c["value"] for c in cmds}
+        for d in self._cache:
+            if d.get("id") == dev_id:
+                for s in d.get("status", []):
+                    if s.get("code") in vals:
+                        s["value"] = vals[s["code"]]
+
     def set_device(self, dev_id, data):
+        marcar_atividade()
         st = self._status(dev_id)
         cmds = []
         if "channel" in data:
@@ -807,8 +843,6 @@ class Tuya:
         if isinstance(st.get(LIGHT_ON), bool):
             cmds += light_commands(st, data)
         self._send(dev_id, cmds)
-        self._cache_t = 0
-        time.sleep(0.5)
         return self.state()
 
     def lights_off(self, room=None):
@@ -819,7 +853,9 @@ class Tuya:
         return self.state()
 
     def diagnose(self):
-        L = [f"Controle Casa v{VERSION} · região {CFG['api_region']}"]
+        L = [f"Controle Casa v{VERSION} · região {CFG['api_region']}", uso_texto()]
+        if COTA["esgotada_ate"] > time.time():
+            L.append("⚠ Cota da Tuya esgotada: leituras automáticas pausadas por 1 h de cada vez.")
         devs = self.devices(force=True)
         L.append(f"Aparelhos na conta: {len(devs)}")
         for d in devs:
@@ -875,6 +911,9 @@ def ac_profile():
                 model=a.get("model", ""))
 
 
+QUOTA_CODES = {"28841004"}
+
+
 def _ac_hint(msg):
     low = msg.lower()
     if "permiss" in low or "1106" in low or "28841101" in low or "não autorizado" in low:
@@ -895,11 +934,72 @@ def _err_text(err):
             "28841101": "Serviço não autorizado no projeto — adicione o 'IR Control Hub Open Service' em Service API.",
             "2008": "Comando não suportado por este aparelho.",
             "2017": "Esse aparelho não aceita o formato de comando padrão.",
+            "28841004": "A cota grátis de chamadas da Tuya deste mês acabou. Ela renova no próximo ciclo; "
+                        "veja Ajustes → Diagnóstico.",
             "28841105": "O trial grátis do IoT Core expirou — renove em Cloud Services → IoT Core.",
             "28841002": "O trial grátis do IoT Core expirou — renove em Cloud Services → IoT Core.",
         }
         return hints.get(code) or f"{msg} (código {code})".strip()
     return str(err)
+
+
+# ---------------------------------------------------------------- consumo da nuvem Tuya
+# O plano gratuito da Tuya dá cerca de 26.000 chamadas por mês. O programa conta as próprias
+# chamadas, economiza quando ninguém está olhando o painel e para de insistir se a cota acabar.
+QUOTA_MES = 26000
+USO_PATH = os.path.join(CONF_DIR, "uso.json")
+USO = {"dia": "", "hoje": 0, "mes": "", "no_mes": 0, "salvo": 0.0}
+COTA = {"esgotada_ate": 0.0, "msg": ""}
+ATIVIDADE = {"t": 0.0}            # última vez que alguém usou o painel
+TTL_ATIVO, TTL_PARADO = 60, 600   # segundos entre leituras da lista de aparelhos
+
+
+def _carregar_uso():
+    try:
+        with open(USO_PATH, encoding="utf-8") as f:
+            USO.update(json.load(f))
+    except Exception:
+        pass
+
+
+def _salvar_uso(forcar=False):
+    if not forcar and time.time() - USO["salvo"] < 300:
+        return
+    USO["salvo"] = time.time()
+    try:
+        os.makedirs(CONF_DIR, exist_ok=True)
+        with open(USO_PATH, "w", encoding="utf-8") as f:
+            json.dump({k: v for k, v in USO.items() if k != "salvo"}, f)
+    except Exception:
+        pass
+
+
+def uso_texto():
+    pct = round(USO["no_mes"] / QUOTA_MES * 100)
+    return (f"Chamadas à nuvem Tuya: hoje {USO['hoje']} · este mês {USO['no_mes']} "
+            f"de ~{QUOTA_MES:,} ({pct}%)".replace(",", "."))
+
+
+def contar_chamada():
+    dia, mes = time.strftime("%Y-%m-%d"), time.strftime("%Y-%m")
+    if USO["dia"] != dia:
+        USO.update(dia=dia, hoje=0)
+    if USO["mes"] != mes:
+        USO.update(mes=mes, no_mes=0)
+    USO["hoje"] += 1
+    USO["no_mes"] += 1
+    _salvar_uso()
+
+
+def marcar_atividade():
+    ATIVIDADE["t"] = time.time()
+
+
+def ttl_atual():
+    return TTL_ATIVO if time.time() - ATIVIDADE["t"] < 300 else TTL_PARADO
+
+
+_carregar_uso()
 
 
 # ---------------------------------------------------------------- conta Positivo
@@ -910,12 +1010,14 @@ def is_pos(dev_id):
     return str(dev_id).startswith("pos:")
 
 
-def positivo_devices(force=False):
+def positivo_devices(force=False, cache_only=False):
     cl = POS["client"]
     if not cl:
         return []
+    if cache_only:
+        return cl._cache
     try:
-        devs = cl.devices(force=force)
+        devs = cl.devices(force=force, ttl=ttl_atual())
         POS["error"] = ""
         return devs
     except Exception as e:
@@ -1121,6 +1223,8 @@ class Handler(BaseHTTPRequestHandler):
             if p == "/api/state":
                 if BACK is None:
                     return self._send(200, dict(needs_setup=True, error=getattr(Handler, "boot_error", None)))
+                if self.headers.get("X-CC-Ativo") == "1":
+                    marcar_atividade()
                 return self._send(200, BACK.state())
             if p == "/api/setup/discover":
                 src = BACK if (BACK is not None and SETUP["tuya"] is None) else (SETUP["tuya"] or BACK)

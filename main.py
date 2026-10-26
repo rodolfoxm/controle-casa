@@ -322,7 +322,7 @@ class Api:
         STATE["window"].minimize()
 
     def hide(self):
-        STATE["window"].hide()
+        hide_window()
 
     def quit(self):
         quit_app()
@@ -405,11 +405,28 @@ def draw_house(size=64, dot=False):
     return im.resize((size, size), Image.LANCZOS)
 
 
+def _tell_panel(visible):
+    """Avisa o painel se ele está à vista (escondido na bandeja = não consulta a nuvem)."""
+    try:
+        STATE["window"].evaluate_js(f"window.ccVisivel && window.ccVisivel({'true' if visible else 'false'})")
+    except Exception:
+        pass
+
+
+def hide_window():
+    w = STATE["window"]
+    if w:
+        w.hide()
+        threading.Thread(target=_tell_panel, args=(False,), daemon=True).start()
+
+
 def show_window(*_):
     w = STATE["window"]
     if w:
+        STATE["user_showed"] = True
         w.show()
         w.restore()
+        threading.Thread(target=_tell_panel, args=(True,), daemon=True).start()
     else:
         open_in_browser()
 
@@ -429,7 +446,7 @@ def refresh_icon():
         return
     try:
         if core.BACK:
-            ac = core.BACK.state()["ac"]
+            ac = core.BACK.state(cache_only=True)["ac"]      # bandeja nunca gasta chamada da nuvem
             STATE["ac_on"] = bool(ac.get("power")) and ac.get("available", True)
     except Exception:
         pass
@@ -453,6 +470,10 @@ def lights_off(*_):
 
 def quit_app(*_):
     STATE["quitting"] = True
+    try:
+        core._salvar_uso(forcar=True)
+    except Exception:
+        pass
     if STATE["icon"]:
         try:
             STATE["icon"].stop()
@@ -626,7 +647,7 @@ def main():
     def on_closing():
         if STATE["quitting"] or STATE["icon"] is None:
             return True
-        win.hide()
+        hide_window()
         return False
 
     glass_done = {"ok": False}
@@ -642,6 +663,11 @@ def main():
         except Exception as e:
             print("vidro:", e)
 
+    def on_loaded():
+        if start_hidden and not STATE.get("user_showed"):
+            _tell_panel(False)               # abriu direto na bandeja: painel não consulta a nuvem
+
+    win.events.loaded += on_loaded
     win.events.closing += on_closing
     win.events.shown += on_shown
     try:

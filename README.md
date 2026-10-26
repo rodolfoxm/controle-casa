@@ -146,6 +146,8 @@ As configurações não se perdem, porque ficam fora da pasta do programa.
   Pedidos vindos de sites abertos no navegador são recusados.
 - Para reportar uma falha de segurança, veja o [SECURITY.md](SECURITY.md).
 - O relatório do Diagnóstico não inclui suas chaves nem sua senha.
+- O programa economiza chamadas à nuvem da Tuya: escondido na bandeja, ele não consulta nada; com o
+  painel aberto, consulta no máximo uma vez por minuto (a cada 10 minutos se você não estiver usando).
 
 ## Problemas comuns
 
@@ -153,6 +155,7 @@ As configurações não se perdem, porque ficam fora da pasta do programa.
 | --- | --- |
 | "Sem permissão" | Confira se o app Smart Life está vinculado ao projeto (passo 5) e se os serviços estão autorizados |
 | "O trial grátis do IoT Core expirou" | Renove em Cloud → Cloud Services → IoT Core |
+| "A cota grátis de chamadas da Tuya deste mês acabou" (código 28841004) | O plano grátis tem cerca de 26.000 chamadas por mês. Espere a cota renovar no próximo ciclo; em **Ajustes → Diagnóstico** aparece quanto o programa já gastou. Os aparelhos da Positivo continuam funcionando |
 | O ar não liga | Ajustes → Diagnóstico → **Testar o ar**. Normalmente falta o *IR Control Hub Open Service* |
 | Nenhum aparelho aparece | Escaneie o QR (passo 5) com a **mesma conta** do Smart Life onde estão os aparelhos |
 | A janela abriu, mas aparece "programa antigo ainda aberto" | Botão direito na casinha → Sair e abra de novo |

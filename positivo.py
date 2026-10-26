@@ -190,8 +190,8 @@ class Positivo:
         return {"id": PREFIX + dev_id, "name": meta.get("name", "?"), "online": bool(online),
                 "category": cat, "status": status, "source": "positivo"}
 
-    def devices(self, force=False):
-        if not force and time.time() - self._cache_t < 6:
+    def devices(self, force=False, ttl=60):
+        if not force and time.time() - self._cache_t < ttl:
             return self._cache
         out = []
         groups = self.api("tuya.m.location.list") or []
@@ -235,7 +235,13 @@ class Positivo:
             raise PositivoError("Esse aparelho não tem essa função.")
         gw = self.meta.get(raw, {}).get("gw", raw)
         self.api("tuya.m.device.dp.publish", {"devId": raw, "gwId": gw, "dps": json.dumps(dps)})
-        self._cache_t = 0
+        # atualiza o estado guardado em vez de reler a nuvem
+        vals = {c["code"]: c["value"] for c in cmds}
+        for d in self._cache:
+            if d["id"] == PREFIX + raw:
+                for s in d["status"]:
+                    if s["code"] in vals:
+                        s["value"] = vals[s["code"]]
 
 
 def _explain(code, msg):

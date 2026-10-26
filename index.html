@@ -530,11 +530,21 @@ html[data-theme="dark"] .msg.good{color:#8ff0bd}
 <script>
 
 const $ = id => document.getElementById(id);
-const UI_VERSION = 11;
+const UI_VERSION = 14;
 const OLD_ENGINE = "O programa antigo ainda está aberto. Clique com o botão direito na casinha da bandeja → Sair, e abra de novo pelo Iniciar.bat.";
+/* economia de chamadas à nuvem: o painel só consulta quando está visível, e avisa quando você está usando */
+let lastUse = Date.now(), hiddenByApp = false;
+["pointerdown","keydown","wheel"].forEach(ev => addEventListener(ev, () => { lastUse = Date.now(); }, {passive:true}));
+const panelVisible = () => !document.hidden && !hiddenByApp;
+const userActive = () => panelVisible() && Date.now() - lastUse < 5 * 60 * 1000;
+window.ccVisivel = v => { hiddenByApp = !v; if (v){ lastUse = Date.now(); load(); } };   // chamado pelo programa
+document.addEventListener("visibilitychange", () => { if (panelVisible()){ lastUse = Date.now(); load(); } });
+
 const api = async (path, body) => {
-  const r = await fetch(path, body ? {method:"POST",headers:{"Content-Type":"application/json","X-Controle-Casa":"1"},body:JSON.stringify(body)}
-                                   : {headers:{"X-Controle-Casa":"1"}});
+  const h = {"X-Controle-Casa":"1"};
+  if (path === "/api/state" && userActive()) h["X-CC-Ativo"] = "1";
+  const r = await fetch(path, body ? {method:"POST",headers:{...h,"Content-Type":"application/json"},body:JSON.stringify(body)}
+                                   : {headers:h});
   const j = await r.json();
   if (r.status === 404 && path.startsWith("/api/")) throw new Error(OLD_ENGINE);
   if (!r.ok) throw new Error(j.error || r.status); return j;
@@ -817,7 +827,7 @@ function showPanel(){
   $("setup").hidden = true; $("panel").hidden = false; $("btnSettings").hidden = false; $("scroll").scrollTop = 0;
   $("panel").classList.remove("rise"); void $("panel").offsetWidth; $("panel").classList.add("rise");
   $("oAccountSub").textContent = CONF.demo ? "Modo demonstração · conectar conta real" : "Trocar chaves de acesso";
-  load(); stopPoll(); poll = setInterval(load, 15000);
+  load(); stopPoll(); poll = setInterval(() => { if (panelVisible()) load(); }, 60000);
 }
 function stopPoll(){ if (poll) clearInterval(poll); poll = null; }
 
