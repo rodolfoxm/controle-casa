@@ -1048,7 +1048,7 @@ _carregar_lista()
 
 
 # ---------------------------------------------------------------- conta Positivo
-POS = {"client": None, "error": ""}
+POS = {"client": None, "error": "", "falhou_em": 0.0}
 
 
 def is_pos(dev_id):
@@ -1059,17 +1059,17 @@ def positivo_devices(force=False, cache_only=False):
     cl = POS["client"]
     if not cl:
         return []
-    if cache_only:
-        return cl._cache or lista_guardada("positivo")
+    if cache_only or (not force and time.time() - POS["falhou_em"] < 60):
+        return cl._cache or lista_guardada("positivo")   # falhou há pouco: não trava o painel esperando
     try:
         devs = cl.devices(force=force, ttl=ttl_atual())
-        POS["error"] = ""
+        POS.update(error="", falhou_em=0.0)
         if devs or not lista_guardada("positivo"):
             guardar_lista("positivo", devs)
             return devs
         return lista_guardada("positivo")   # veio vazia de repente: não apaga o painel
     except Exception as e:
-        POS["error"] = str(e)
+        POS.update(error=str(e), falhou_em=time.time())
         print("[Positivo]", e)
         return cl._cache or lista_guardada("positivo")   # mantém o último estado conhecido
 

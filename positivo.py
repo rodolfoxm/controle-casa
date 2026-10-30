@@ -113,14 +113,19 @@ class Positivo:
         req = urllib.request.Request(url, data=urllib.parse.urlencode(body).encode() if body else b"",
                                      headers={"User-Agent": "TY-UA=APP/Android/1.1.6/SDK/null",
                                               "Content-Type": "application/x-www-form-urlencoded"})
-        try:
-            with urllib.request.urlopen(req, timeout=12) as r:
-                res = json.loads(r.read().decode("utf-8"))
-        except urllib.error.HTTPError as e:
-            raise PositivoError(f"A nuvem da Positivo recusou a conexão (HTTP {e.code}).")
-        except Exception as e:
-            raise PositivoError("Sem conexão com a nuvem da Positivo. Confira a internet do PC."
-                                + (f" ({e})" if str(e) else ""))
+        res = None
+        for tentativa in range(3):          # a conexão às vezes demora (antivírus, Wi-Fi): tenta de novo
+            try:
+                with urllib.request.urlopen(req, timeout=12) as r:
+                    res = json.loads(r.read().decode("utf-8"))
+                break
+            except urllib.error.HTTPError as e:
+                raise PositivoError(f"A nuvem da Positivo recusou a conexão (HTTP {e.code}).")
+            except Exception as e:
+                if tentativa == 2:
+                    raise PositivoError("Sem conexão com a nuvem da Positivo. Confira a internet do PC."
+                                        + (f" ({e})" if str(e) else ""))
+                time.sleep(1 + tentativa)
         if res.get("success"):
             return res.get("result")
         code, msg = res.get("errorCode", ""), res.get("errorMsg", "")
