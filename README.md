@@ -139,6 +139,8 @@ As configurações não se perdem, porque ficam fora da pasta do programa.
 
 - Tudo fica **no seu computador**, em `%APPDATA%\ControleCasa\config.json`. Não há servidor nosso
   nem coleta de dados. O programa só conversa com a nuvem da Tuya (e com a da Positivo, se você ligar).
+- Na mesma pasta, `aparelhos.json` guarda a última lista de aparelhos (nome, tipo e estado), para o
+  painel não ficar vazio se a nuvem falhar. Ele não guarda chaves, IP nem localização.
 - O **Access Secret da Tuya** e a **senha da Positivo** são guardados **protegidos pelo Windows** (DPAPI):
   só abrem na sua conta de usuário, neste computador. Se o Windows não conseguir proteger, o programa
   avisa e não grava o segredo.

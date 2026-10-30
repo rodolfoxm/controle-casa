@@ -8,3 +8,9 @@
 - Se a cota acabar, o programa para de insistir e mostra uma mensagem clara.
 
 Numa simulação de uso normal, o consumo caiu de cerca de 170 mil para cerca de 3 mil chamadas por mês.
+
+**Correção:** o painel ficava vazio quando a nuvem falhava.
+
+- O programa guarda a última lista de aparelhos que deu certo (só nome, tipo e estado; sem chaves, IP ou localização) e mostra ela se a Tuya bloquear ou a Positivo não responder.
+- A conexão com a nuvem da Positivo tenta de novo, até 3 vezes, quando demora para responder.
+- Se a Positivo falhar, o painel não fica carregando: espera 1 minuto antes de tentar de novo.
