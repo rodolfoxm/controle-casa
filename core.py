@@ -22,7 +22,7 @@ if sys.stdout is None or sys.stderr is None:      # pythonw: sem console
     sys.stderr = sys.stderr or _null
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 
-VERSION = 14
+VERSION = 15
 FROZEN = getattr(sys, "frozen", False)
 APP_DIR = os.path.dirname(sys.executable if FROZEN else os.path.abspath(__file__))
 RES = getattr(sys, "_MEIPASS", APP_DIR)
@@ -418,7 +418,7 @@ class Tuya:
         if err:
             raise ConnectionError(_err_text(err))
         self.lock = threading.Lock()
-        self._cache, self._cache_t = [], 0
+        self._cache, self._cache_t = lista_guardada("tuya"), 0   # mostra a última lista até a nuvem responder
         a = CFG["ac"]
         self.ac_type = a.get("type", "auto")
         self.ir_id, self.remote_id, self.wifi_id = a.get("infrared_id", ""), a.get("remote_id", ""), a.get("device_id", "")
@@ -467,14 +467,18 @@ class Tuya:
             if last:
                 q["last_row_key"] = last
             r = self.req("/v1.0/iot-01/associated-users/devices", query=q)
-            if raise_errors and r.get("success") is False:
-                raise ConnectionError(_err_text(r))
+            if r.get("success") is False or r.get("Error"):
+                if raise_errors:
+                    raise ConnectionError(_err_text(r))
+                self._cache_t = time.time()     # falhou: segue com a última lista boa, sem insistir
+                return self._cache
             res = r.get("result") or {}
             out += res.get("devices", [])
             if not res.get("has_more"):
                 break
             last = res.get("last_row_key", "")
         self._cache, self._cache_t = out, time.time()
+        guardar_lista("tuya", out)
         return out
 
     def ir_remotes(self, hub_id):
@@ -991,6 +995,46 @@ def contar_chamada():
     _salvar_uso()
 
 
+# ---------------------------------------------------------------- última lista de aparelhos
+# Se a nuvem falhar (cota da Tuya, internet ainda subindo ao ligar o PC), o painel mostra a
+# última lista que deu certo em vez de ficar vazio. Só guarda o necessário para desenhar o
+# painel: nada de chaves locais, IP ou localização.
+LISTA_PATH = os.path.join(CONF_DIR, "aparelhos.json")
+LISTA = {"tuya": [], "positivo": []}
+_CAMPOS = ("id", "name", "category", "online", "status", "owner_id")
+
+
+def _carregar_lista():
+    try:
+        with open(LISTA_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        for k in LISTA:
+            if isinstance(data.get(k), list):
+                LISTA[k] = data[k]
+    except Exception:
+        pass
+
+
+def lista_guardada(fonte):
+    import copy
+    return copy.deepcopy(LISTA.get(fonte) or [])
+
+
+def guardar_lista(fonte, devs):
+    limpa = [{k: d[k] for k in _CAMPOS if k in d} for d in devs if isinstance(d, dict) and d.get("id")]
+    if limpa == LISTA.get(fonte):
+        return
+    LISTA[fonte] = limpa
+    try:
+        os.makedirs(CONF_DIR, exist_ok=True)
+        tmp = LISTA_PATH + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(LISTA, f, ensure_ascii=False)
+        os.replace(tmp, LISTA_PATH)
+    except Exception:
+        pass
+
+
 def marcar_atividade():
     ATIVIDADE["t"] = time.time()
 
@@ -1000,6 +1044,7 @@ def ttl_atual():
 
 
 _carregar_uso()
+_carregar_lista()
 
 
 # ---------------------------------------------------------------- conta Positivo
@@ -1015,15 +1060,18 @@ def positivo_devices(force=False, cache_only=False):
     if not cl:
         return []
     if cache_only:
-        return cl._cache
+        return cl._cache or lista_guardada("positivo")
     try:
         devs = cl.devices(force=force, ttl=ttl_atual())
         POS["error"] = ""
-        return devs
+        if devs or not lista_guardada("positivo"):
+            guardar_lista("positivo", devs)
+            return devs
+        return lista_guardada("positivo")   # veio vazia de repente: não apaga o painel
     except Exception as e:
         POS["error"] = str(e)
         print("[Positivo]", e)
-        return cl._cache            # mantém o último estado conhecido
+        return cl._cache or lista_guardada("positivo")   # mantém o último estado conhecido
 
 
 def _positivo_device_id():
